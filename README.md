@@ -130,7 +130,7 @@ python build_dictionary.py --umls-terms umls_terms.tsv --output-dir ./output
 
 ### 2. Clinical Abbreviations (`dictionary_abbreviations.tsv`)
 
-A TSV file with columns: `abbreviation`, `expansion`, `category`. An example with 483 common clinical abbreviations is included in `examples/dictionary_abbreviations.tsv`. You can add your own institution-specific abbreviations.
+A TSV file with columns: `abbreviation`, `expansion`, `category`. An example with 483 common clinical abbreviations is included in `docs/dictionary_abbreviations.tsv`. You can add your own institution-specific abbreviations.
 
 ### 3. Corpus (`working_sample.csv`)
 
