@@ -1,0 +1,12 @@
+services:
+  screener:
+    build: .
+    ports:
+      - "8400:8400"
+    # Uncomment the line below and remove --no-model to enable MLM mode:
+    # command: ["python", "-m", "screener", "--host", "0.0.0.0", "--no-browser", "--model", "thomas-sounack/BioClinical-ModernBERT-base"]
+    volumes:
+      - model-cache:/root/.cache/huggingface  # Cache downloaded models
+
+volumes:
+  model-cache:

@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clinical Corpus Spell Screener — Tier 1</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.38/vue.global.prod.min.js"></script>
+<style>
+  :root { --blue: #2563eb; --blue-light: #dbeafe; --red: #dc2626; --red-light: #fee2e2;
+    --green: #059669; --green-light: #d1fae5; --amber: #d97706; --amber-light: #fef3c7;
+    --indigo: #4f46e5; --indigo-light: #e0e7ff; --purple: #7c3aed; --gray: #6b7280;
+    --gray-light: #f3f4f6; --gray-border: #e5e7eb; --orange: #ea580c; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; background: #f8fafc; color: #1e293b; font-size: 14px; }
+  .mono { font-family: 'Courier New', Consolas, monospace; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+  button { cursor: pointer; border: none; font-family: inherit; font-size: 12px; padding: 6px 12px; border-radius: 8px; font-weight: 500; transition: all 0.15s; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  input[type="text"], input[type="number"] { font-family: 'Courier New', monospace; font-size: 13px; padding: 6px 10px; border: 1px solid var(--gray-border); border-radius: 8px; outline: none; }
+  input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+  label { font-size: 11px; color: var(--gray); display: block; margin-bottom: 2px; }
+
+  /* Layout */
+  .header { display: flex; align-items: center; gap: 12px; padding: 16px 0 8px; }
+  .header-badge { width: 36px; height: 36px; background: var(--blue); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 13px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .grid-review { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  .flex { display: flex; } .flex-wrap { flex-wrap: wrap; } .gap-2 { gap: 8px; } .gap-1 { gap: 4px; }
+  .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+  .mb-2 { margin-bottom: 8px; } .mb-3 { margin-bottom: 12px; } .mt-3 { margin-top: 12px; }
+
+  /* Cards */
+  .card { background: white; border: 1px solid var(--gray-border); border-radius: 12px; padding: 16px; }
+  .card-sm { background: white; border: 1px solid var(--gray-border); border-radius: 8px; padding: 8px 12px; text-align: center; min-width: 70px; }
+  .card-header { padding: 12px 16px; border-bottom: 1px solid var(--gray-border); font-size: 12px; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Dropzone */
+  .dropzone { border: 2px dashed var(--gray-border); border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .dropzone:hover { border-color: #94a3b8; background: #f8fafc; }
+  .dropzone.loaded { border-color: var(--green); background: #f0fdf4; }
+
+  /* Token styles */
+  .text-panel { height: 45vh; overflow-y: auto; padding: 16px; line-height: 2; font-family: 'Courier New', Consolas, monospace; font-size: 13px; }
+  .correction-panel { height: 45vh; overflow-y: auto; padding: 16px; }
+  .tok { display: inline; }
+  .tok-oov { background: #fee2e2; color: #7f1d1d; border-bottom: 2px solid #f87171; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-oov:hover { background: #fecaca; }
+  .tok-approved { background: #d1fae5; color: #064e3b; border-bottom: 2px solid #34d399; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-skipped { background: #fef9c3; color: #854d0e; border-bottom: 2px dashed #fbbf24; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-vocab { background: #e0e7ff; color: #3730a3; border-bottom: 2px solid #818cf8; border-radius: 3px; padding: 1px 3px; }
+  .tok-auto { background: #dbeafe; color: #1e3a5f; border-bottom: 2px solid #60a5fa; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-selected { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .tok-protected { color: #94a3b8; }
+  .tok-strike { text-decoration: line-through; color: #94a3b8; font-size: 0.8em; margin-right: 2px; }
+  .tok-correction { font-weight: 600; }
+  .tok-space { display: inline; white-space: pre; }
+
+  /* Buttons */
+  .btn-blue { background: var(--blue); color: white; } .btn-blue:hover { background: #1d4ed8; }
+  .btn-green { background: var(--green-light); color: #064e3b; } .btn-green:hover { background: #a7f3d0; }
+  .btn-amber { background: var(--amber-light); color: #92400e; } .btn-amber:hover { background: #fde68a; }
+  .btn-gray { background: var(--gray-light); color: #374151; } .btn-gray:hover { background: #e5e7eb; }
+  .btn-indigo { background: var(--indigo-light); color: #3730a3; } .btn-indigo:hover { background: #c7d2fe; }
+  .btn-orange { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; } .btn-orange:hover { background: #ffedd5; }
+  .btn-purple { background: #f5f3ff; color: var(--purple); } .btn-purple:hover { background: #ede9fe; }
+  .btn-big { padding: 12px 32px; font-size: 15px; font-weight: 600; border-radius: 12px; box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
+
+  /* Text nav */
+  .nav-btn { padding: 3px 8px; font-size: 11px; border-radius: 6px; font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+  .nav-active { background: var(--blue); color: white; }
+  .nav-pending { background: var(--red-light); color: #991b1b; border: 1px solid #fecaca; }
+  .nav-done { background: var(--green-light); color: #064e3b; border: 1px solid #a7f3d0; }
+  .nav-default { background: var(--gray-light); color: var(--gray); }
+  .nav-badge { background: var(--red); color: white; font-size: 9px; padding: 0 4px; border-radius: 99px; }
+
+  /* Candidate button */
+  .cand-btn { width: 100%; text-align: left; padding: 8px 12px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; border: 1px solid var(--gray-border); background: white; margin-bottom: 4px; }
+  .cand-btn:hover { border-color: var(--blue); background: #eff6ff; }
+  .cand-btn.selected { border-color: var(--green); background: var(--green-light); font-weight: 600; }
+
+  /* Progress */
+  .progress-bg { width: 100%; height: 10px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--blue); border-radius: 99px; transition: width 0.3s; }
+
+  /* Prob bar */
+  .prob-bar { height: 3px; border-radius: 2px; background: var(--blue); margin-top: 3px; transition: width 0.3s; }
+
+  /* Context */
+  .context-box { background: var(--gray-light); border-radius: 8px; padding: 10px; font-size: 12px; font-family: 'Courier New', monospace; line-height: 1.6; }
+  .context-highlight { background: #fef08a; font-weight: 700; padding: 1px 3px; border-radius: 3px; }
+
+  /* Settings panel in review */
+  .settings-bar { background: white; border: 1px solid var(--gray-border); border-radius: 10px; padding: 10px 16px; margin-bottom: 12px; }
+  .settings-bar summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--gray); user-select: none; }
+  .settings-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+  .settings-grid input { width: 100%; }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--gray); margin-top: 8px; padding: 0 4px; }
+  .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+
+  @media (max-width: 900px) { .grid-review { grid-template-columns: 1fr; } .grid-3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const { createApp, ref, reactive, computed, h, watch } = Vue;
+
+createApp({
+  setup() {
+    const phase = ref('upload');
+    const dictSet = ref(new Set());
+    const abbrSet = ref(new Set());
+    const addedVocab = ref(new Set());
+    const texts = ref([]);
+    const originalTexts = ref([]);
+    const analyses = ref([]);
+    const undoStack = ref([]);
+    const currentTextIdx = ref(0);
+    const selectedTokenIdx = ref(null);
+    const customCorrection = ref('');
+    const backendStatus = ref(null);
+    const showSettings = ref(false);
+    const progress = reactive({ current: 0, total: 0, phase: '' });
+    const batchRange = reactive({ from: 1, to: null });
+
+    const backendConfig = reactive({
+      backend: 'mlm', enabled: true,
+      mlm: { endpoint: 'http://localhost:8400', confidenceThreshold: 0.30, ratioThreshold: 3.0, batchSize: 10 },
+      ollama: { endpoint: 'http://localhost:11434', model: 'medgemma3:4b', confidenceThreshold: 0.7, batchSize: 10 },
+    });
+
+    const fileSlots = reactive([
+      { id: 'dict', label: 'Medical Dictionary', hint: 'dictionary_combined.txt', accept: '.txt', loaded: false, count: 0 },
+      { id: 'abbr', label: 'Abbreviations', hint: 'dictionary_abbreviations.tsv', accept: '.tsv,.csv,.txt', loaded: false, count: 0 },
+      { id: 'corpus', label: 'Corpus (CSV)', hint: 'working_sample.csv', accept: '.csv', loaded: false, count: 0 },
+    ]);
+
+    // ═══ COMPUTED ════════════════════════════════════════════════════════
+    const allFilesLoaded = computed(() => fileSlots.every(f => f.loaded));
+    const progressPct = computed(() => progress.total > 0 ? Math.round(progress.current / progress.total * 100) : 0);
+    const currentTokens = computed(() => analyses.value[currentTextIdx.value] || []);
+    const selectedToken = computed(() => selectedTokenIdx.value !== null ? currentTokens.value[selectedTokenIdx.value] : null);
+    const currentOovCount = computed(() => currentTokens.value.filter(t => t.status==='oov' || t.status==='auto_approved').length);
+    const currentReviewedCount = computed(() => currentTokens.value.filter(t => ['approved','skipped','added_to_vocab'].includes(t.status)).length);
+    const currentFlaggedTotal = computed(() => currentTokens.value.filter(t => !['known','protected'].includes(t.status)).length);
+
+    const contextWindow = computed(() => {
+      if (selectedTokenIdx.value === null) return [];
+      const s = Math.max(0, selectedTokenIdx.value - 10);
+      return currentTokens.value.slice(s, Math.min(currentTokens.value.length, selectedTokenIdx.value + 11));
+    });
+    const contextHighlightIdx = computed(() => selectedTokenIdx.value !== null ? selectedTokenIdx.value - Math.max(0, selectedTokenIdx.value - 10) : -1);
+
+    const prevOovIdx = computed(() => {
+      if (selectedTokenIdx.value === null) return null;
+      for (let i = selectedTokenIdx.value - 1; i >= 0; i--) if (needsReview(currentTokens.value[i])) return i;
+      return null;
+    });
+    const nextOovIdx = computed(() => {
+      if (selectedTokenIdx.value === null) return null;
+      for (let i = selectedTokenIdx.value + 1; i < currentTokens.value.length; i++) if (needsReview(currentTokens.value[i])) return i;
+      return null;
+    });
+
+    const statCards = computed(() => {
+      let total=0,known=0,prot=0,oov=0,approved=0,skipped=0,autoA=0,vocab=0;
+      for (const toks of analyses.value) for (const t of toks) {
+        total++;
+        if (t.status==='known') known++; else if (t.status==='protected') prot++;
+        else if (t.status==='oov') oov++; else if (t.status==='approved') approved++;
+        else if (t.status==='auto_approved') autoA++; else if (t.status==='skipped') skipped++;
+        else if (t.status==='added_to_vocab') vocab++;
+      }
+      return [
+        {l:'Tokens',v:total,c:'gray'},{l:'Known',v:known,c:'gray'},{l:'Protected',v:prot,c:'gray'},
+        {l:'MLM Auto',v:autoA,c:'blue'},{l:'Approved',v:approved,c:'green'},
+        {l:'Skipped',v:skipped,c:'amber'},{l:'Vocab+',v:vocab,c:'indigo'},{l:'Remaining',v:oov,c:'red'},
+      ];
+    });
+
+    // ═══ GUARDS ══════════════════════════════════════════════════════════
+    function isProtected(t) {
+      if (/\d/.test(t)) return true;
+      if (/^[\(\)\[\]\{\}\*\#\@]/.test(t)) return true;
+      if (/^[a-zA-Z]{1,2}[:\.]?$/.test(t)) return true;
+      if (/[:\-\/][a-zA-Z0-9]/.test(t)) return true;
+      if (/^[a-zA-Z]+:$/.test(t)) return true;
+      if (/^[^a-zA-Z]*$/.test(t)) return true;
+      if (t.length <= 2) return true;
+      if (/^[A-Z\-]+$/.test(t) && t.length <= 6) return true;
+      return false;
+    }
+    function stripPunct(word) { return word.replace(/^[^a-zA-Z]+/,'').replace(/[^a-zA-Z]+$/,''); }
+    function tokenize(text) {
+      const raw = text.split(/\s+/).filter(t=>t), result = [];
+      for (const tok of raw) {
+        if (/[a-zA-Z],[a-zA-Z]/.test(tok)||/[a-zA-Z];[a-zA-Z]/.test(tok)) {
+          for (const p of tok.split(/([,;])/)) { if (p) result.push(p); }
+        } else result.push(tok);
+      }
+      return result;
+    }
+
+    // ═══ EDIT DISTANCE ══════════════════════════════════════════════════
+    function edits1(word) {
+      const L='abcdefghijklmnopqrstuvwxyz',R=new Set();
+      for (let i=0;i<word.length;i++){R.add(word.slice(0,i)+word.slice(i+1));for(const c of L)R.add(word.slice(0,i)+c+word.slice(i+1));}
+      for(let i=0;i<word.length-1;i++)R.add(word.slice(0,i)+word[i+1]+word[i]+word.slice(i+2));
+      for(let i=0;i<=word.length;i++)for(const c of L)R.add(word.slice(0,i)+c+word.slice(i));
+      R.delete(word);return R;
+    }
+    function findCandidates(word) {
+      const w=word.toLowerCase(),d=dictSet.value,ed1=[];
+      for(const e of edits1(w))if(d.has(e))ed1.push({word:e,dist:1});
+      ed1.sort((a,b)=>a.word.localeCompare(b.word));return ed1.slice(0,12);
+    }
+    function inDict(word) {
+      const lo=word.toLowerCase();
+      return dictSet.value.has(lo)||dictSet.value.has(word)||abbrSet.value.has(word)||abbrSet.value.has(word.toUpperCase())||abbrSet.value.has(lo)||addedVocab.value.has(lo);
+    }
+    function needsReview(t) { return t.status==='oov'||t.status==='auto_approved'; }
+
+    function analyseText(text) {
+      return tokenize(text).map((raw,idx) => {
+        const stripped=stripPunct(raw);
+        if(!stripped||isProtected(raw)||isProtected(stripped))
+          return {raw,stripped,position:idx,status:'protected',candidates:[],correction:null,llmSuggestion:null,llmConfidence:0,originalScore:0,allScored:[]};
+        if(inDict(stripped))
+          return {raw,stripped,position:idx,status:'known',candidates:[],correction:null,llmSuggestion:null,llmConfidence:0,originalScore:0,allScored:[]};
+        const candidates=findCandidates(stripped);
+        return {raw,stripped,position:idx,status:'oov',candidates,correction:candidates.length>0?candidates[0].word:null,llmSuggestion:null,llmConfidence:0,originalScore:0,allScored:[]};
+      });
+    }
+
+    // ═══ FILE LOADING ═══════════════════════════════════════════════════
+    function handleFile(file, slotId) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result, slot = fileSlots.find(f=>f.id===slotId);
+        if (slotId==='dict') {
+          const set = new Set();
+          for (const line of text.split(/\r?\n/)) {
+            const t = line.trim();
+            if (!t||t.startsWith('#')||t.startsWith('"')||t.length<2) continue;
+            set.add(t.toLowerCase()); set.add(t);
+          }
+          const common = 'the,and,was,for,with,this,that,from,are,were,been,have,has,not,but,which,will,can,had,all,their,would,there,also,into,most,should,after,when,than,these,other,may,its,over,such,only,some,could,them,now,then,each,where,those,both,between,own,during,might,well,very,just,being,much,still,through,our,before,does,any,while,about,more,made,how,what,who,did,his,her,she,you,they,your,under,upon,above,below,patient,patients,hospital,medical,clinical,treatment,diagnosis,history,examination,findings,normal,present,noted,significant,moderate,mild,severe,chronic,acute,bilateral,right,left,upper,lower,positive,negative,stable,unchanged,increased,decreased,without'.split(',');
+          for (const w of common) set.add(w);
+          dictSet.value = set; slot.count = set.size;
+        } else if (slotId==='abbr') {
+          const set = new Set();
+          for (const line of text.split(/\r?\n/).slice(1)) {
+            const p = line.split('\t');
+            if(p[0]){const a=p[0].trim();set.add(a);set.add(a.toLowerCase());set.add(a.toUpperCase());}
+          }
+          abbrSet.value = set; slot.count = set.size;
+        } else if (slotId==='corpus') {
+          const lines = text.split(/\r?\n/).filter(l=>l.trim()), rows = [];
+          for (let i=1;i<lines.length;i++){
+            let line = lines[i].replace(/\r$/,'');
+            if (line.startsWith('"')&&line.endsWith('"')) line = line.slice(1,-1).replace(/""/g,'"');
+            if (line.trim()) rows.push(line.trim());
+          }
+          texts.value = rows; originalTexts.value = [...rows]; slot.count = rows.length;
+        }
+        slot.loaded = true;
+      };
+      reader.readAsText(file);
+    }
+
+    // ═══ BACKENDS ════════════════════════════════════════════════════════
+    async function callMLMServer(token, tokens, tokenIdx) {
+      const s=Math.max(0,tokenIdx-10), e=Math.min(tokens.length,tokenIdx+11);
+      const before=tokens.slice(s,tokenIdx).map(t=>t.raw).join(' '), after=tokens.slice(tokenIdx+1,e).map(t=>t.raw).join(' ');
+      try {
+        const resp = await fetch(backendConfig.mlm.endpoint+'/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({context_before:before,token:token.stripped,context_after:after,candidates:token.candidates.slice(0,8).map(c=>({word:c.word,dist:c.dist})),top_k:15})});
+        return resp.ok ? await resp.json() : null;
+      } catch(err) { return null; }
+    }
+    function processMLMResult(tok, result) {
+      if(!result) return;
+      tok.originalScore = result.original_score||0;
+      tok.allScored = (result.candidate_scores||[]).filter(c=>c.probability>0.001);
+      tok.llmConfidence = result.confidence||0;
+      if (result.best_correction) {
+        tok.llmSuggestion = result.best_correction.word;
+        tok.llmConfidence = result.best_correction.probability;
+        const bp=result.best_correction.probability, op=result.original_score||0;
+        const mt=bp>=backendConfig.mlm.confidenceThreshold;
+        const mr=op<0.001||(bp/op)>=backendConfig.mlm.ratioThreshold;
+        const diff=result.best_correction.word.toLowerCase()!==tok.stripped.toLowerCase();
+        if(mt&&mr&&diff){tok.status='auto_approved';tok.correction=result.best_correction.word;}
+      } else if(result.original_score>=backendConfig.mlm.confidenceThreshold){
+        tok.llmSuggestion=tok.stripped;tok.status='skipped';tok.correction=null;
+      }
+    }
+    async function callOllama(token, tokens, tokenIdx) {
+      const s=Math.max(0,tokenIdx-10),e=Math.min(tokens.length,tokenIdx+11);
+      const before=tokens.slice(s,tokenIdx).map(t=>t.raw).join(' '),after=tokens.slice(tokenIdx+1,e).map(t=>t.raw).join(' ');
+      const cands=token.candidates.slice(0,3).map(c=>c.word).join(', ');
+      const prompt=`Clinical spell-check. The word "${token.stripped}" may be misspelled.\n\nContext: "${before} [${token.stripped}] ${after}"\n${cands?'Nearest dictionary matches: '+cands:'No close matches.'}\n\nIf misspelled, reply ONLY the corrected word. If correct, reply the same word. One word only.`;
+      try {
+        const resp=await fetch(backendConfig.ollama.endpoint+'/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({model:backendConfig.ollama.model,prompt,stream:false,options:{temperature:0.1,num_predict:20}})});
+        if(!resp.ok) return null;
+        const d=await resp.json(); return (d.response||'').trim();
+      } catch(err){return null;}
+    }
+    function processOllamaResult(tok, response) {
+      if(!response)return;
+      const resp=response.toLowerCase().trim().split(/\s+/)[0].replace(/[^a-z\-]/g,'');
+      if(!resp)return; tok.llmSuggestion=resp;
+      if(resp===tok.stripped.toLowerCase()){tok.llmConfidence=0.9;if(0.9>=backendConfig.ollama.confidenceThreshold){tok.status='skipped';tok.correction=null;}}
+      else if(inDict(resp)){const isEd1=tok.candidates.some(c=>c.word===resp);tok.llmConfidence=isEd1?0.95:0.6;if(tok.llmConfidence>=backendConfig.ollama.confidenceThreshold){tok.status='auto_approved';tok.correction=resp;}}
+      else{tok.llmConfidence=0.2;}
+    }
+    async function testBackend() {
+      backendStatus.value=null;
+      if(backendConfig.backend==='mlm'){
+        try{const r=await fetch(backendConfig.mlm.endpoint+'/health');if(r.ok){const d=await r.json();backendStatus.value={ok:true,msg:`✓ ${d.model} on ${d.device}`};}else backendStatus.value={ok:false,msg:'Failed: '+r.status};}
+        catch(e){backendStatus.value={ok:false,msg:'Cannot reach MLM server'};}
+      } else if(backendConfig.backend==='ollama'){
+        try{const r=await fetch(backendConfig.ollama.endpoint+'/api/tags');if(r.ok){const d=await r.json();backendStatus.value={ok:true,msg:`✓ ${(d.models||[]).length} models`};}else backendStatus.value={ok:false,msg:'Failed'};}
+        catch(e){backendStatus.value={ok:false,msg:'Cannot reach Ollama'};}
+      }
+    }
+
+    // ═══ MAIN PIPELINE ══════════════════════════════════════════════════
+    async function runAnalysis() {
+      phase.value='processing';
+      const from=(batchRange.from||1)-1, to=batchRange.to?Math.min(batchRange.to,texts.value.length):texts.value.length;
+      const subset=texts.value.slice(from,to);
+      progress.phase='Phase 1: Dictionary OOV detection...'; progress.total=subset.length; progress.current=0;
+      const results=[];
+      for(let i=0;i<subset.length;i++){if(i%2===0)await new Promise(r=>setTimeout(r,0));progress.current=i+1;results.push(analyseText(subset[i]));}
+      if(backendConfig.enabled&&backendConfig.backend!=='none'){
+        const oovs=[];
+        for(let ti=0;ti<results.length;ti++)for(let tki=0;tki<results[ti].length;tki++)if(results[ti][tki].status==='oov')oovs.push({ti,tki});
+        if(oovs.length>0){
+          const label=backendConfig.backend==='mlm'?'MLM':'Ollama';
+          progress.phase=`Phase 2: ${label} — ${oovs.length} OOV tokens...`;progress.total=oovs.length;progress.current=0;
+          for(let i=0;i<oovs.length;i++){
+            const{ti,tki}=oovs[i];const tok=results[ti][tki];
+            if(backendConfig.backend==='mlm'){const r=await callMLMServer(tok,results[ti],tki);processMLMResult(tok,r);}
+            else{const r=await callOllama(tok,results[ti],tki);processOllamaResult(tok,r);}
+            progress.current=i+1;if(i%3===0)await new Promise(r=>setTimeout(r,0));
+          }
+        }
+      }
+      analyses.value=results;currentTextIdx.value=0;selectedTokenIdx.value=null;undoStack.value=[];phase.value='review';
+    }
+
+    // ═══ ACTIONS ═════════════════════════════════════════════════════════
+    function pushUndo(ti,tki,prev){undoStack.value.push({textIdx:ti,tokenIdx:tki,prev:{...prev}});if(undoStack.value.length>200)undoStack.value.shift();}
+    function approveCorrection(idx,correction){const t=analyses.value[currentTextIdx.value][idx];pushUndo(currentTextIdx.value,idx,{status:t.status,correction:t.correction});t.status='approved';t.correction=correction;autoAdvance(idx);}
+    function skipToken(idx){const t=analyses.value[currentTextIdx.value][idx];pushUndo(currentTextIdx.value,idx,{status:t.status,correction:t.correction});t.status='skipped';autoAdvance(idx);}
+    function revertToOriginal(idx){const t=analyses.value[currentTextIdx.value][idx];pushUndo(currentTextIdx.value,idx,{status:t.status,correction:t.correction});t.status='skipped';t.correction=null;autoAdvance(idx);}
+    function addToVocab(idx){
+      const t=analyses.value[currentTextIdx.value][idx];pushUndo(currentTextIdx.value,idx,{status:t.status,correction:t.correction});
+      const w=t.stripped.toLowerCase();addedVocab.value.add(w);addedVocab.value=new Set(addedVocab.value);
+      t.status='added_to_vocab';t.correction=null;
+      for(const toks of analyses.value)for(const tk of toks)if(tk.stripped.toLowerCase()===w&&tk.status==='oov'){tk.status='added_to_vocab';tk.correction=null;}
+      autoAdvance(idx);
+    }
+    function applyCustom(){const v=customCorrection.value.trim();if(v&&selectedTokenIdx.value!==null){approveCorrection(selectedTokenIdx.value,v);customCorrection.value='';}}
+    function autoAdvance(fromIdx){
+      const toks=analyses.value[currentTextIdx.value];
+      for(let i=fromIdx+1;i<toks.length;i++)if(needsReview(toks[i])){selectedTokenIdx.value=i;return;}
+      for(let i=0;i<fromIdx;i++)if(needsReview(toks[i])){selectedTokenIdx.value=i;return;}
+      selectedTokenIdx.value=null;
+    }
+    function undo(){if(!undoStack.value.length)return;const a=undoStack.value.pop();if(a.textIdx!==currentTextIdx.value)currentTextIdx.value=a.textIdx;const t=analyses.value[a.textIdx][a.tokenIdx];t.status=a.prev.status;t.correction=a.prev.correction;selectedTokenIdx.value=a.tokenIdx;}
+    function acceptAllTopCurrent(){for(const t of analyses.value[currentTextIdx.value])if(t.status==='oov'){if(t.allScored?.length>0){t.status='approved';t.correction=t.allScored[0].word;}else if(t.candidates.length>0){t.status='approved';t.correction=t.candidates[0].word;}}}
+    function skipAllCurrent(){for(const t of analyses.value[currentTextIdx.value])if(t.status==='oov')t.status='skipped';}
+    function acceptAllTopGlobal(){for(const toks of analyses.value)for(const t of toks)if(t.status==='oov'){if(t.allScored?.length>0){t.status='approved';t.correction=t.allScored[0].word;}else if(t.candidates.length>0){t.status='approved';t.correction=t.candidates[0].word;}else t.status='skipped';}}
+
+    if(typeof window!=='undefined')window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}});
+
+    // ═══ DISPLAY ════════════════════════════════════════════════════════
+    function tokenClass(t){if(t.status==='auto_approved')return'tok-auto';if(t.status==='approved')return'tok-approved';if(t.status==='skipped')return'tok-skipped';if(t.status==='added_to_vocab')return'tok-vocab';return'tok-oov';}
+    function reconstructToken(t){const l=t.raw.match(/^[^a-zA-Z]*/)?.[0]||'',r=t.raw.match(/[^a-zA-Z]*$/)?.[0]||'';return l+t.correction+r;}
+    function goToText(i){currentTextIdx.value=i;selectedTokenIdx.value=null;}
+    function selectToken(i){selectedTokenIdx.value=i;customCorrection.value='';}
+    function oovCountFor(i){return(analyses.value[i]||[]).filter(t=>t.status==='oov'||t.status==='auto_approved').length;}
+
+    // ═══ EXPORT ═════════════════════════════════════════════════════════
+    function buildCorrectedText(arr){return arr.map(t=>(t.status==='approved'||t.status==='auto_approved')&&t.correction?reconstructToken(t):t.raw).join(' ');}
+    function dl(c,f,m){const b=new Blob([c],{type:m}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=f;a.click();URL.revokeObjectURL(u);}
+    function exportCorrected(){
+      dl('text\n'+originalTexts.value.map(t=>'"'+t.replace(/"/g,'""')+'"').join('\n'),'original_corpus.csv','text/csv');
+      setTimeout(()=>dl('text\n'+analyses.value.map(toks=>'"'+buildCorrectedText(toks).replace(/"/g,'""')+'"').join('\n'),'corrected_corpus.csv','text/csv'),300);
+    }
+    function csvEsc(v){const s=String(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?'"'+s.replace(/"/g,'""')+'"':s;}
+    function exportReport(){
+      const rows=['text_idx,position,original,correction,status,mlm_suggestion,mlm_confidence,original_score,candidates'];
+      analyses.value.forEach((tokens,ti)=>{for(const t of tokens)if(!['known','protected'].includes(t.status))
+        rows.push([ti,t.position,csvEsc(t.raw),csvEsc(t.correction||''),t.status,csvEsc(t.llmSuggestion||''),t.llmConfidence.toFixed(4),t.originalScore.toFixed(4),csvEsc((t.allScored||t.candidates).map(c=>c.word+'='+(c.probability||c.dist)).join('|'))].join(','));});
+      dl(rows.join('\n'),'screening_report.csv','text/csv');
+    }
+    function exportVocab(){dl([...addedVocab.value].sort().join('\n'),'added_vocabulary.txt','text/plain');}
+
+    // ═══ RENDER ══════════════════════════════════════════════════════════
+    // Using Vue's render function for complete control over whitespace
+    return () => {
+      const H = h; // shorthand
+
+      // ── HEADER ──
+      const header = H('div', {class:'container'}, [
+        H('div', {class:'header'}, [
+          H('div', {class:'header-badge'}, 'T1'),
+          H('div', {}, [
+            H('div', {style:'font-size:18px;font-weight:700;color:#1e293b'}, 'Clinical Corpus Spell Screener'),
+            H('div', {style:'font-size:11px;color:#6b7280'}, 'Tier 1 — Dictionary OOV + MLM/LLM auto-correction + Human adjudication'),
+          ])
+        ])
+      ]);
+
+      // ── UPLOAD PHASE ──
+      if (phase.value === 'upload') {
+        const dropzones = fileSlots.map(f => {
+          const inputRef = ref(null);
+          return H('div', {
+            class: 'dropzone' + (f.loaded ? ' loaded' : ''),
+            onClick: () => {
+              const el = document.getElementById('file-' + f.id);
+              if (el) el.click();
+            }
+          }, [
+            H('input', { id: 'file-'+f.id, type: 'file', accept: f.accept, style: 'display:none',
+              onChange: (e) => handleFile(e.target.files?.[0], f.id) }),
+            H('div', {style:'font-size:24px;margin-bottom:4px'}, f.loaded ? '✓' : '📁'),
+            H('div', {style:'font-weight:600;font-size:13px;color:'+(f.loaded?'#059669':'#374151')}, f.label),
+            H('div', {style:'font-size:11px;color:#6b7280;margin-top:4px'}, f.loaded ? f.count.toLocaleString()+' entries' : f.hint),
+          ]);
+        });
+
+        const backendCard = H('div', {class:'card',style:'margin-top:16px'}, [
+          H('div', {style:'font-size:13px;font-weight:600;color:#374151;margin-bottom:12px'}, '⚡ Backend Configuration'),
+          H('div', {class:'flex gap-2',style:'margin-bottom:12px'}, [
+            ...['mlm','ollama','none'].map(v => {
+              const labels = {mlm:'MLM Server (Recommended)',ollama:'Ollama (Generative)',none:'Dictionary Only'};
+              const descs = {mlm:'BioClinical-ModernBERT — calibrated probabilities',ollama:'MedGemma via Ollama — heuristic',none:'Human reviews all OOV'};
+              return H('div', {
+                style:'flex:1;border:2px solid '+(backendConfig.backend===v?'#2563eb':'#e5e7eb')+';border-radius:10px;padding:10px;cursor:pointer;background:'+(backendConfig.backend===v?'#eff6ff':'white'),
+                onClick:()=>{backendConfig.backend=v;}
+              }, [
+                H('div',{style:'font-size:12px;font-weight:600;color:'+(backendConfig.backend===v?'#1d4ed8':'#374151')},labels[v]),
+                H('div',{style:'font-size:10px;color:#6b7280;margin-top:2px'},descs[v]),
+              ]);
+            })
+          ]),
+          backendConfig.backend==='mlm' ? H('div',{class:'grid-4',style:'margin-bottom:8px'},[
+            H('div',{},[H('label',{},'Endpoint'),H('input',{value:backendConfig.mlm.endpoint,onInput:e=>{backendConfig.mlm.endpoint=e.target.value;},style:'width:100%'})]),
+            H('div',{},[H('label',{},'Confidence threshold'),H('input',{type:'number',value:backendConfig.mlm.confidenceThreshold,min:0,max:1,step:0.05,onInput:e=>{backendConfig.mlm.confidenceThreshold=parseFloat(e.target.value);},style:'width:100%'})]),
+            H('div',{},[H('label',{},'Ratio threshold'),H('input',{type:'number',value:backendConfig.mlm.ratioThreshold,min:1,max:100,step:0.5,onInput:e=>{backendConfig.mlm.ratioThreshold=parseFloat(e.target.value);},style:'width:100%'})]),
+            H('div',{},[H('label',{},'Batch size'),H('input',{type:'number',value:backendConfig.mlm.batchSize,min:1,max:50,onInput:e=>{backendConfig.mlm.batchSize=parseInt(e.target.value);},style:'width:100%'})]),
+          ]) : null,
+          H('div',{class:'flex gap-2 items-center',style:'margin-top:8px'},[
+            H('label',{style:'font-size:13px;display:flex;align-items:center;gap:6px'},[
+              H('input',{type:'checkbox',checked:backendConfig.enabled,onChange:e=>{backendConfig.enabled=e.target.checked;}}),
+              'Enable auto-correction'
+            ]),
+            H('button',{class:'btn-purple',onClick:testBackend},'Test Connection'),
+            backendStatus.value ? H('span',{style:'font-size:11px;color:'+(backendStatus.value.ok?'#059669':'#dc2626')},backendStatus.value.msg) : null,
+          ]),
+        ]);
+
+        const startBtn = allFilesLoaded.value ? H('div',{style:'text-align:center;margin-top:20px'},[
+          H('button',{class:'btn-blue btn-big',onClick:runAnalysis},'Run Tier 1 Screening →')
+        ]) : null;
+
+        return H('div',{},[header, H('div',{class:'container',style:'padding-top:24px'},[
+          H('div',{class:'grid-3'},dropzones), backendCard, startBtn
+        ])]);
+      }
+
+      // ── PROCESSING ──
+      if (phase.value === 'processing') {
+        return H('div',{},[header, H('div',{class:'container',style:'max-width:500px;padding-top:80px;text-align:center'},[
+          H('div',{style:'color:#4b5563;font-weight:500;margin-bottom:12px'},progress.phase),
+          H('div',{class:'progress-bg'},[H('div',{class:'progress-fill',style:'width:'+progressPct.value+'%'})]),
+          H('div',{style:'font-size:11px;color:#9ca3af;margin-top:6px'},progress.current+' / '+progress.total+' — '+progressPct.value+'%'),
+        ])]);
+      }
+
+      // ── REVIEW PHASE ──
+      if (phase.value === 'review') {
+        // Stats
+        const stats = H('div',{class:'flex flex-wrap gap-1',style:'margin-bottom:10px'},
+          statCards.value.map(s => H('div',{class:'card-sm'},[
+            H('div',{class:'mono',style:'font-size:15px;font-weight:700;color:var(--'+s.c+')'},s.v.toLocaleString()),
+            H('div',{style:'font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px'},s.l),
+          ]))
+        );
+
+        // Settings panel (collapsible)
+        const settingsPanel = H('details',{class:'settings-bar',open:showSettings.value,onToggle:e=>{showSettings.value=e.target.open;}},[
+          H('summary',{},'⚙ Threshold Settings (click to adjust)'),
+          H('div',{class:'settings-grid'},[
+            H('div',{},[H('label',{},'Confidence threshold'),H('input',{type:'number',value:backendConfig.mlm.confidenceThreshold,min:0,max:1,step:0.05,onInput:e=>{backendConfig.mlm.confidenceThreshold=parseFloat(e.target.value);}})]),
+            H('div',{},[H('label',{},'Ratio threshold'),H('input',{type:'number',value:backendConfig.mlm.ratioThreshold,min:1,max:100,step:0.5,onInput:e=>{backendConfig.mlm.ratioThreshold=parseFloat(e.target.value);}})]),
+            H('div',{},[H('label',{},'Backend'),H('div',{style:'font-size:12px;color:#374151;padding:6px 0'},backendConfig.backend.toUpperCase())]),
+            H('div',{style:'font-size:10px;color:#6b7280;padding-top:16px'},'Changes apply to future auto-correction runs. Use "Accept All Top" to re-apply.'),
+          ]),
+        ]);
+
+        // Text nav
+        const textNav = H('div',{class:'flex flex-wrap gap-1 items-center',style:'margin-bottom:10px'},[
+          H('span',{style:'font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-right:4px'},'Text:'),
+          ...analyses.value.map((a,i) => {
+            const r = oovCountFor(i);
+            const cls = i===currentTextIdx.value ? 'nav-active' : r>0 ? 'nav-pending' : 'nav-default';
+            return H('button',{class:'nav-btn '+cls,onClick:()=>goToText(i)},[
+              '#'+(i+1),
+              r>0 ? H('span',{class:'nav-badge'},String(r)) : null,
+            ]);
+          })
+        ]);
+
+        // ── Token rendering (the critical spacing fix) ──
+        const tokenSpans = [];
+        const toks = currentTokens.value;
+        for (let idx = 0; idx < toks.length; idx++) {
+          const tok = toks[idx];
+          if (idx > 0) tokenSpans.push(' '); // literal text space between tokens
+
+          if (tok.status === 'known') {
+            tokenSpans.push(H('span', {class:'tok'}, tok.raw));
+          } else if (tok.status === 'protected') {
+            tokenSpans.push(H('span', {class:'tok tok-protected'}, tok.raw));
+          } else if (tok.status === 'added_to_vocab') {
+            tokenSpans.push(H('span', {class:'tok tok-vocab', title:'Added to vocab'}, tok.raw));
+          } else {
+            const cls = tokenClass(tok) + (idx === selectedTokenIdx.value ? ' tok-selected' : '');
+            let content;
+            if ((tok.status === 'approved' || tok.status === 'auto_approved') && tok.correction && tok.correction !== tok.stripped) {
+              content = [
+                H('span', {class:'tok-strike'}, tok.raw),
+                H('span', {class:'tok-correction'}, reconstructToken(tok)),
+              ];
+            } else {
+              content = tok.raw;
+            }
+            tokenSpans.push(H('span', {class:'tok '+cls, onClick:()=>selectToken(idx), title: tok.status==='oov'?'OOV: '+tok.candidates.length+' candidates':tok.status}, content));
+          }
+        }
+
+        const textPanel = H('div',{class:'card',style:'display:flex;flex-direction:column'},[
+          H('div',{class:'flex justify-between items-center',style:'padding-bottom:10px;border-bottom:1px solid #e5e7eb;margin-bottom:10px'},[
+            H('div',{style:'font-size:13px;font-weight:600;color:#374151'},[
+              'Text #'+(currentTextIdx.value+1),
+              H('span',{style:'margin-left:8px;font-size:11px;font-weight:400;color:#9ca3af'},
+                currentFlaggedTotal.value+' flagged · '+currentReviewedCount.value+' reviewed · '+currentOovCount.value+' remaining'),
+            ]),
+            H('div',{class:'flex gap-1'},[
+              H('button',{class:'btn-gray',disabled:!undoStack.value.length,onClick:undo},'↩ Undo'),
+              H('button',{class:'btn-green',onClick:acceptAllTopCurrent},'✓ Accept all top'),
+              H('button',{class:'btn-amber',onClick:skipAllCurrent},'↷ Skip all'),
+            ]),
+          ]),
+          H('div',{class:'text-panel'}, tokenSpans),
+        ]);
+
+        // ── Correction panel ──
+        let corrContent;
+        const st = selectedToken.value;
+        if (!st || st.status === 'known' || st.status === 'protected') {
+          corrContent = H('div',{style:'color:#9ca3af;font-size:13px;text-align:center;padding-top:40px'},
+            ['Click a ',H('span',{class:'tok-oov',style:'cursor:default;font-size:11px'},'highlighted'),' token to review']);
+        } else {
+          const ctxSpans = contextWindow.value.map((ct,ci) =>
+            H('span',{class:ci===contextHighlightIdx.value?'context-highlight':''},[ct.raw,' ']));
+          const cands = (st.allScored && st.allScored.length>0 ? st.allScored : st.candidates).slice(0,10);
+
+          corrContent = H('div',{style:'animation:fadeIn 0.2s ease'},[
+            H('div',{style:'margin-bottom:10px'},[
+              H('div',{style:'font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;margin-bottom:4px'},'Context (±10 tokens)'),
+              H('div',{class:'context-box'},ctxSpans),
+            ]),
+            H('div',{class:'card',style:'padding:12px'},[
+              H('div',{class:'flex justify-between items-center',style:'margin-bottom:6px'},[
+                H('span',{class:'mono',style:'font-size:17px;font-weight:700;color:#b91c1c'},st.stripped),
+                st.originalScore>0 ? H('span',{style:'font-size:10px;background:#f3f4f6;color:#4b5563;padding:2px 8px;border-radius:99px'},'P(orig)='+(st.originalScore*100).toFixed(1)+'%') : null,
+              ]),
+              st.llmSuggestion ? H('div',{style:'font-size:11px;padding:6px 10px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px;margin-bottom:8px'},[
+                H('span',{style:'font-weight:600;color:#6d28d9'},'MLM: '),
+                H('span',{class:'mono',style:'font-weight:500;color:#5b21b6'},st.llmSuggestion),
+                H('span',{style:'color:#8b5cf6;margin-left:4px'},' ('+(st.llmConfidence*100).toFixed(1)+'%)'),
+              ]) : null,
+              ...cands.map((c,ci) => {
+                const isSel = st.correction===c.word && (st.status==='approved'||st.status==='auto_approved');
+                return H('button',{class:'cand-btn'+(isSel?' selected':''),onClick:()=>approveCorrection(selectedTokenIdx.value,c.word)},[
+                  H('div',{class:'flex justify-between items-center'},[
+                    H('span',{},[c.word, c.edit_distance>0?H('span',{style:'font-size:10px;color:#9ca3af;margin-left:4px'},'ed='+c.edit_distance):c.edit_distance===-1?H('span',{style:'font-size:10px;color:#7c3aed;margin-left:4px'},'MLM'):null]),
+                    c.probability>0 ? H('span',{style:'font-size:10px;color:#6b7280'},(c.probability*100).toFixed(1)+'%') : null,
+                  ]),
+                  c.probability>0?H('div',{class:'prob-bar',style:'width:'+Math.min(c.probability*200,100)+'%;opacity:'+(0.4+c.probability*0.6)}):null,
+                ]);
+              }),
+              cands.length===0 ? H('div',{style:'font-size:12px;color:#9ca3af;font-style:italic;margin-bottom:8px'},'No candidates found') : null,
+              H('div',{class:'flex gap-1',style:'margin:8px 0'},[
+                H('input',{type:'text',value:customCorrection.value,onInput:e=>{customCorrection.value=e.target.value;},onKeydown:e=>{if(e.key==='Enter')applyCustom();},placeholder:'Custom correction...',style:'flex:1'}),
+                H('button',{class:'btn-blue',disabled:!customCorrection.value.trim(),onClick:applyCustom},'Apply'),
+              ]),
+              H('div',{class:'flex gap-1 flex-wrap'},[
+                st.status==='auto_approved'?H('button',{class:'btn-orange',style:'flex:1',onClick:()=>revertToOriginal(selectedTokenIdx.value)},'✕ Keep original'):null,
+                H('button',{class:'btn-amber',style:'flex:1',onClick:()=>skipToken(selectedTokenIdx.value)},'Skip'),
+                st.status==='skipped'?H('button',{class:'btn-indigo',style:'flex:1',onClick:()=>addToVocab(selectedTokenIdx.value)},'+ Vocab'):null,
+                prevOovIdx.value!==null?H('button',{class:'btn-gray',onClick:()=>selectToken(prevOovIdx.value)},'←'):null,
+                nextOovIdx.value!==null?H('button',{class:'btn-gray',onClick:()=>selectToken(nextOovIdx.value)},'→'):null,
+              ]),
+            ]),
+          ]);
+        }
+        const corrPanel = H('div',{class:'card',style:'display:flex;flex-direction:column'},[
+          H('div',{class:'card-header'},'Correction Panel'),
+          H('div',{class:'correction-panel'},corrContent),
+        ]);
+
+        // Global actions
+        const globalBar = H('div',{class:'card flex justify-between items-center flex-wrap gap-2',style:'margin-top:12px'},[
+          H('div',{class:'flex gap-2 items-center flex-wrap'},[
+            H('button',{class:'btn-blue',style:'padding:8px 16px',onClick:acceptAllTopGlobal},'✓ Accept All Top (Global)'),
+            addedVocab.value.size>0?H('span',{style:'font-size:11px;color:var(--indigo)'},addedVocab.value.size+' word(s) added to vocab'):null,
+          ]),
+          H('div',{class:'flex gap-2 flex-wrap'},[
+            addedVocab.value.size>0?H('button',{class:'btn-indigo',onClick:exportVocab},'↓ Added Vocab'):null,
+            H('button',{class:'btn-gray',onClick:exportReport},'↓ Report (CSV)'),
+            H('button',{class:'btn-blue',style:'padding:8px 16px;font-weight:600',onClick:exportCorrected},'↓ Export Paired CSVs'),
+          ]),
+        ]);
+
+        const legend = H('div',{class:'legend'},[
+          H('span',{},[H('span',{class:'legend-dot',style:'background:#fee2e2;border:1px solid #fca5a5'}),'OOV']),
+          H('span',{},[H('span',{class:'legend-dot',style:'background:#dbeafe;border:1px solid #93c5fd'}),'MLM Auto']),
+          H('span',{},[H('span',{class:'legend-dot',style:'background:#d1fae5;border:1px solid #6ee7b7'}),'Approved']),
+          H('span',{},[H('span',{class:'legend-dot',style:'background:#fef3c7;border:1px solid #fcd34d'}),'Skipped']),
+          H('span',{},[H('span',{class:'legend-dot',style:'background:#e0e7ff;border:1px solid #a5b4fc'}),'Vocab+']),
+          H('span',{style:'color:#94a3b8'},'gray = Protected'),
+        ]);
+
+        return H('div',{},[header, H('div',{class:'container'},[
+          stats, settingsPanel, textNav,
+          H('div',{class:'grid-review'},[textPanel, corrPanel]),
+          globalBar, legend,
+        ])]);
+      }
+
+      return H('div',{},[header]);
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

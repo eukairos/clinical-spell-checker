@@ -1,0 +1,13 @@
+# Handle line endings automatically
+* text=auto
+
+# Force shell scripts to LF (Unix) even on Windows
+*.sh text eol=lf
+
+# Force batch files to CRLF (Windows)
+*.bat text eol=crlf
+
+# Keep these as-is
+*.png binary
+*.tsv binary
+*.csv binary

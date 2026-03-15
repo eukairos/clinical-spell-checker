@@ -1,0 +1,8 @@
+# Core (always required)
+fastapi>=0.110
+uvicorn>=0.29
+
+# MLM mode (optional — not needed for dictionary-only mode)
+# Uncomment these or install separately: pip install torch transformers
+# torch>=2.0
+# transformers>=4.40
