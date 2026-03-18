@@ -1,0 +1,32 @@
+[project]
+name = "clinical-spell-screener"
+version = "1.0.0"
+description = "Interactive medical text spell screening tool with dictionary OOV detection, masked LM scoring, and human-in-the-loop review"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+mlm = [
+    "torch>=2.0",
+    "transformers>=4.40",
+]
+
+[project.scripts]
+clinical-spell-screener = "screener.server:main"
+
+[project.urls]
+Homepage = "https://github.com/eukairos/clinical-spell-screener"
+Repository = "https://github.com/eukairos/clinical-spell-screener"
+Issues = "https://github.com/eukairos/clinical-spell-screener/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["screener"]

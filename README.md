@@ -22,52 +22,51 @@ Although it was built for clinical text, you can adapt it to text in your domain
 
 ## Quick Start
 
-### Option A: One-Click Launch (Windows)
+### Option A: Using uv (Recommended)
 
-1. **Download** this repository (green "Code" button → "Download ZIP") and extract it
-2. **Double-click** `start_lite.bat` for dictionary-only mode (no GPU needed)
-   — or `start.bat` for full AI-assisted mode (requires ~4 GB disk for the model)
-3. A browser window opens automatically at `http://localhost:8400`
-4. Upload your files and start reviewing
-
-### Option B: One-Click Launch (Mac / Linux)
+[uv](https://docs.astral.sh/uv/) handles Python versions, dependencies, and virtual environments automatically. No pre-existing Python installation required.
 
 ```bash
-# Download and extract the repository, then:
+# Install uv (one-time)
+# Windows (PowerShell):
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Mac/Linux:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and run
+git clone https://github.com/eukairos/clinical-spell-screener.git
 cd clinical-spell-screener
-chmod +x start.sh start_lite.sh
 
-# Dictionary-only mode (no GPU):
-./start_lite.sh
+# Dictionary-only mode (no GPU, ~30 sec first run):
+uv run clinical-spell-screener --no-model
 
-# Full AI-assisted mode:
-./start.sh
+# Full AI-assisted mode (downloads model ~500 MB on first run):
+uv run --extra mlm clinical-spell-screener
 ```
 
-### Option C: Manual Setup (all platforms)
+### Option B: One-Click Launch
+
+1. **Download** this repository (green "Code" button → "Download ZIP") and extract it
+2. **Double-click** `start_lite.bat` (Windows) or run `./start_lite.sh` (Mac/Linux) for dictionary-only mode
+   — or `start.bat` / `./start.sh` for full AI-assisted mode
+3. The scripts install `uv` automatically if needed
+4. A browser window opens at `http://localhost:8400`
+
+### Option C: Manual Setup with pip
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/clinical-spell-screener.git
+git clone https://github.com/eukairos/clinical-spell-screener.git
 cd clinical-spell-screener
-
-# 2. Create a virtual environment
 python -m venv .venv
 
-# Windows:
-.venv\Scripts\activate
-# Mac/Linux:
-source .venv/bin/activate
+# Windows: .venv\Scripts\activate
+# Mac/Linux: source .venv/bin/activate
 
-# 3a. Install (dictionary-only — lightweight, no GPU):
-pip install fastapi uvicorn
+pip install -e .                         # Dictionary-only mode
+pip install -e ".[mlm]"                   # Full AI-assisted mode
 
-# 3b. OR install (full AI-assisted mode):
-pip install fastapi uvicorn torch transformers
-
-# 4. Run
-python -m screener              # Full mode (auto-opens browser)
-python -m screener --no-model   # Dictionary-only mode
+clinical-spell-screener --no-model        # or: python -m screener --no-model
+clinical-spell-screener                   # or: python -m screener
 ```
 
 ### Option D: Docker
@@ -194,9 +193,9 @@ For large corpora, multiple reviewers can work in parallel:
 
 ```
 clinical-spell-screener/
+├── pyproject.toml               # Package definition (uv / pip)
 ├── start.bat / start.sh         # One-click launchers (full mode)
 ├── start_lite.bat / start_lite.sh  # One-click launchers (dictionary-only)
-├── requirements.txt
 ├── Dockerfile / docker-compose.yml
 ├── screener/
 │   ├── __init__.py
@@ -219,10 +218,11 @@ clinical-spell-screener/
 
 | Mode | Python | RAM | GPU | Disk |
 |------|--------|-----|-----|------|
-| Dictionary-only | 3.9+ | 1 GB | Not needed | ~50 MB |
-| MLM-assisted (CPU) | 3.9+ | 4 GB | Not needed | ~2 GB |
-| MLM-assisted (GPU) | 3.9+ | 4 GB | Any CUDA GPU | ~2 GB |
+| Dictionary-only | 3.10–3.13 | 1 GB | Not needed | ~50 MB |
+| MLM-assisted (CPU) | 3.10–3.13 | 4 GB | Not needed | ~2 GB |
+| MLM-assisted (GPU) | 3.10–3.13 | 4 GB | Any CUDA GPU | ~2 GB |
 
+If using `uv`, Python is managed automatically — you don't need to install it separately.
 First-run model download is ~500 MB. Subsequent launches are fast (~5 seconds).
 
 ## Keyboard Shortcuts
@@ -234,13 +234,13 @@ First-run model download is ~500 MB. Subsequent launches are fast (~5 seconds).
 
 ## Troubleshooting
 
-**"Python not found"** — Install Python 3.9+ from [python.org](https://www.python.org/downloads/). On Windows, check "Add Python to PATH" during installation.
+**"Python not found"** — Use `uv` (recommended) which manages Python automatically. Or install Python 3.10–3.13 from [python.org](https://www.python.org/downloads/). Avoid Python 3.14 (dependency compatibility issues).
 
 **Model download is slow** — The first run downloads BioClinical-ModernBERT (~500 MB). Subsequent runs use the cached model. If you're behind a proxy, set `HTTPS_PROXY` before running.
 
-**CUDA/GPU errors** — Run in CPU mode: `python -m screener --device cpu` or use dictionary-only mode: `python -m screener --no-model`
+**CUDA/GPU errors** — Run in CPU mode: `uv run --extra mlm clinical-spell-screener --device cpu` or use dictionary-only mode: `uv run clinical-spell-screener --no-model`
 
-**Port already in use** — Use a different port: `python -m screener --port 9000` or from the launcher: `start.bat --port 9000`
+**Port already in use** — Use a different port: `uv run clinical-spell-screener --port 9000`
 
 **Browser doesn't open** — Manually navigate to `http://localhost:8400`
 
