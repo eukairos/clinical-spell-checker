@@ -33,15 +33,16 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 # Mac/Linux:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone and run
-git clone https://github.com/eukairos/clinical-spell-screener.git
+# Clone the repository
+git clone https://github.com/eukairos/clinical-spell-checker.git
 cd clinical-spell-screener
 
-# Dictionary-only mode (no GPU, ~30 sec first run):
-uv run clinical-spell-screener --no-model
+# run startup scripts
+1. **Double-click** `start_lite.bat` (Windows) or run `./start_lite.sh` (Mac/Linux) for dictionary-only mode
+   — or `start.bat` / `./start.sh` for full AI-assisted mode
+2. The scripts install `uv` automatically if needed
+3. A browser window opens at `http://localhost:8400
 
-# Full AI-assisted mode (downloads model ~500 MB on first run):
-uv run --extra mlm clinical-spell-screener
 ```
 
 ### Option B: One-Click Launch
