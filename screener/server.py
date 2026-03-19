@@ -119,6 +119,10 @@ def create_app(model_name: Optional[str] = None, device: str = "auto") -> FastAP
     def serve_ui():
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/compare")
+    def serve_compare():
+        return FileResponse(STATIC_DIR / "compare.html")
+
     return app
 
 
@@ -166,7 +170,8 @@ Examples:
     print("  Clinical Spell Screener")
     print("=" * 60)
     print(f"  Mode:     {mode}")
-    print(f"  URL:      {url}")
+    print(f"  Screener: {url}")
+    print(f"  Compare:  {url}/compare")
     print(f"  API docs: {url}/docs")
     print()
     print("  Open the URL above in your browser.")

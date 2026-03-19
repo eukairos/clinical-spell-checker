@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edit Distance vs MLM — Spell Correction Comparison</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.38/vue.global.prod.min.js"></script>
+<style>
+  :root { --blue: #2563eb; --red: #dc2626; --green: #059669; --amber: #d97706;
+    --indigo: #4f46e5; --purple: #7c3aed; --gray: #6b7280; --teal: #0d9488;
+    --gray-light: #f3f4f6; --gray-border: #e5e7eb; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; background: #f8fafc; color: #1e293b; font-size: 14px; }
+  .mono { font-family: 'Courier New', Consolas, monospace; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+  button { cursor: pointer; border: none; font-family: inherit; font-size: 12px; padding: 6px 12px; border-radius: 8px; font-weight: 500; transition: all 0.15s; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  input[type="text"], input[type="number"] { font-family: 'Courier New', monospace; font-size: 13px; padding: 6px 10px; border: 1px solid var(--gray-border); border-radius: 8px; outline: none; }
+  input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+  label { font-size: 11px; color: var(--gray); display: block; margin-bottom: 2px; }
+  .header { display: flex; align-items: center; gap: 12px; padding: 16px 0 8px; }
+  .header-badge { width: 36px; height: 36px; background: var(--teal); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 11px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-review { display: grid; grid-template-columns: 5fr 4fr; gap: 12px; }
+  .flex { display: flex; } .flex-wrap { flex-wrap: wrap; } .gap-2 { gap: 8px; } .gap-1 { gap: 4px; }
+  .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+  .card { background: white; border: 1px solid var(--gray-border); border-radius: 12px; padding: 16px; }
+  .card-sm { background: white; border: 1px solid var(--gray-border); border-radius: 8px; padding: 8px 12px; text-align: center; min-width: 70px; }
+  .card-header { padding: 10px 16px; border-bottom: 1px solid var(--gray-border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .dropzone { border: 2px dashed var(--gray-border); border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .dropzone:hover { border-color: #94a3b8; }
+  .dropzone.loaded { border-color: var(--green); background: #f0fdf4; }
+  .text-panel { height: 40vh; overflow-y: auto; padding: 16px; line-height: 2; font-family: 'Courier New', monospace; font-size: 13px; }
+  .compare-panel { height: 40vh; overflow-y: auto; padding: 12px; }
+  .tok { display: inline; }
+  .tok-oov { background: #fee2e2; color: #7f1d1d; border-bottom: 2px solid #f87171; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-oov:hover { background: #fecaca; }
+  .tok-approved { background: #d1fae5; color: #064e3b; border-bottom: 2px solid #34d399; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-skipped { background: #fef9c3; color: #854d0e; border-bottom: 2px dashed #fbbf24; border-radius: 3px; padding: 1px 3px; cursor: pointer; }
+  .tok-selected { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .tok-protected { color: #94a3b8; }
+  .tok-strike { text-decoration: line-through; color: #94a3b8; font-size: 0.8em; margin-right: 2px; }
+  .tok-correction { font-weight: 600; }
+  .btn-blue { background: var(--blue); color: white; } .btn-blue:hover { background: #1d4ed8; }
+  .btn-green { background: #d1fae5; color: #064e3b; } .btn-green:hover { background: #a7f3d0; }
+  .btn-amber { background: #fef3c7; color: #92400e; } .btn-amber:hover { background: #fde68a; }
+  .btn-gray { background: var(--gray-light); color: #374151; } .btn-gray:hover { background: #e5e7eb; }
+  .btn-teal { background: #ccfbf1; color: #134e4a; } .btn-teal:hover { background: #99f6e4; }
+  .btn-purple { background: #f5f3ff; color: var(--purple); } .btn-purple:hover { background: #ede9fe; }
+  .btn-big { padding: 12px 32px; font-size: 15px; font-weight: 600; border-radius: 12px; box-shadow: 0 4px 12px rgba(13,148,136,0.25); }
+  .nav-btn { padding: 3px 8px; font-size: 11px; border-radius: 6px; font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+  .nav-active { background: var(--teal); color: white; }
+  .nav-pending { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .nav-default { background: var(--gray-light); color: var(--gray); }
+  .nav-badge { background: var(--red); color: white; font-size: 9px; padding: 0 4px; border-radius: 99px; }
+  .text-nav-scroll { max-height: 100px; overflow-y: auto; border: 1px solid var(--gray-border); border-radius: 8px; padding: 6px; background: white; }
+  .cand-btn { width: 100%; text-align: left; padding: 6px 10px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 12px; border: 1px solid var(--gray-border); background: white; margin-bottom: 3px; }
+  .cand-btn:hover { border-color: var(--blue); background: #eff6ff; }
+  .cand-btn.selected { border-color: var(--green); background: #d1fae5; font-weight: 600; }
+  .cand-btn.overlap { border-left: 3px solid var(--teal); }
+  .progress-bg { width: 100%; height: 10px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--teal); border-radius: 99px; transition: width 0.3s; }
+  .prob-bar { height: 3px; border-radius: 2px; margin-top: 2px; transition: width 0.3s; }
+  .context-box { background: var(--gray-light); border-radius: 8px; padding: 8px; font-size: 11px; font-family: 'Courier New', monospace; line-height: 1.5; }
+  .context-highlight { background: #fef08a; font-weight: 700; padding: 1px 3px; border-radius: 3px; }
+  .col-ed { border-left: 3px solid var(--blue); } .col-mlm { border-left: 3px solid var(--purple); }
+  .tag-ed { background: #dbeafe; color: #1e40af; font-size: 9px; padding: 1px 5px; border-radius: 99px; font-weight: 600; }
+  .tag-mlm { background: #f3e8ff; color: #6b21a8; font-size: 9px; padding: 1px 5px; border-radius: 99px; font-weight: 600; }
+  .tag-both { background: #ccfbf1; color: #134e4a; font-size: 9px; padding: 1px 5px; border-radius: 99px; font-weight: 600; }
+  .metric-bar { height: 20px; border-radius: 4px; display: flex; overflow: hidden; font-size: 10px; font-weight: 600; }
+  .metric-bar > div { display: flex; align-items: center; justify-content: center; color: white; min-width: 20px; }
+  @media (max-width: 1000px) { .grid-review { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const { createApp, ref, reactive, computed, h } = Vue;
+createApp({
+  setup() {
+    const phase = ref('upload');
+    const dictSet = ref(new Set());
+    const abbrSet = ref(new Set());
+    const texts = ref([]);
+    const analyses = ref([]);
+    const undoStack = ref([]);
+    const currentTextIdx = ref(0);
+    const selectedTokenIdx = ref(null);
+    const customCorrection = ref('');
+    const backendStatus = ref(null);
+    const progress = reactive({ current: 0, total: 0, phase: '' });
+    const batchRange = reactive({ from: 1, to: null });
+    const mlmEndpoint = ref('http://localhost:8400');
+    const fileSlots = reactive([
+      { id: 'dict', label: 'Medical Dictionary', hint: 'dictionary_combined.txt', accept: '.txt', loaded: false, count: 0 },
+      { id: 'abbr', label: 'Abbreviations', hint: 'dictionary_abbreviations.tsv', accept: '.tsv,.csv,.txt', loaded: false, count: 0 },
+      { id: 'corpus', label: 'Corpus (CSV)', hint: 'working_sample.csv', accept: '.csv', loaded: false, count: 0 },
+    ]);
+
+    const allFilesLoaded = computed(() => fileSlots.every(f => f.loaded));
+    const progressPct = computed(() => progress.total > 0 ? Math.round(progress.current / progress.total * 100) : 0);
+    const currentTokens = computed(() => analyses.value[currentTextIdx.value] || []);
+    const selectedToken = computed(() => selectedTokenIdx.value !== null ? currentTokens.value[selectedTokenIdx.value] : null);
+    const currentOovCount = computed(() => currentTokens.value.filter(t => t.status === 'oov').length);
+
+    const contextWindow = computed(() => {
+      if (selectedTokenIdx.value === null) return [];
+      const s = Math.max(0, selectedTokenIdx.value - 10);
+      return currentTokens.value.slice(s, Math.min(currentTokens.value.length, selectedTokenIdx.value + 11));
+    });
+    const contextHighlightIdx = computed(() => selectedTokenIdx.value !== null ? selectedTokenIdx.value - Math.max(0, selectedTokenIdx.value - 10) : -1);
+
+    // ── Agreement metrics ──
+    const metrics = computed(() => {
+      let total = 0, agree = 0, edOnly = 0, mlmOnly = 0, neither = 0, fromEd = 0, fromMlm = 0, fromCustom = 0, skipped = 0;
+      for (const toks of analyses.value) for (const t of toks) {
+        if (t.status === 'protected' || t.status === 'known') continue;
+        total++;
+        const hasEdCands = t.edCandidates && t.edCandidates.length > 0;
+        const hasMlmCands = t.mlmCandidates && t.mlmCandidates.length > 0;
+        const edTop = hasEdCands ? t.edCandidates[0].word : null;
+        const mlmTop = hasMlmCands ? t.mlmCandidates[0].word : null;
+        if (edTop && mlmTop && edTop === mlmTop) agree++;
+        else if (edTop && !mlmTop) edOnly++;
+        else if (!edTop && mlmTop) mlmOnly++;
+        else if (!edTop && !mlmTop) neither++;
+        if (t.status === 'approved') { if (t.chosenFrom === 'ed') fromEd++; else if (t.chosenFrom === 'mlm') fromMlm++; else fromCustom++; }
+        if (t.status === 'skipped') skipped++;
+      }
+      return { total, agree, edOnly, mlmOnly, neither, fromEd, fromMlm, fromCustom, skipped,
+        disagreed: total - agree - neither - edOnly - mlmOnly };
+    });
+
+    // ── Guards (same as screener) ──
+    function isProtected(t) {
+      if (/\d/.test(t)) return true; if (/^[\(\)\[\]\{\}\*\#\@]/.test(t)) return true;
+      if (/^[a-zA-Z]{1,2}[:\.]?$/.test(t)) return true; if (/[:\-\/][a-zA-Z0-9]/.test(t)) return true;
+      if (/^[a-zA-Z]+:$/.test(t)) return true; if (/^[^a-zA-Z]*$/.test(t)) return true;
+      if (t.length <= 2) return true; if (/^[A-Z\-]+$/.test(t) && t.length <= 6) return true; return false;
+    }
+    function stripPunct(w) { return w.replace(/^[^a-zA-Z]+/,'').replace(/[^a-zA-Z]+$/,''); }
+    function tokenize(text) {
+      const raw = text.split(/\s+/).filter(t=>t), result = [];
+      for (const tok of raw) { if (/[a-zA-Z],[a-zA-Z]/.test(tok)||/[a-zA-Z];[a-zA-Z]/.test(tok)) { for (const p of tok.split(/([,;])/)) { if (p) result.push(p); } } else result.push(tok); }
+      return result;
+    }
+    function edits1(word) {
+      const L='abcdefghijklmnopqrstuvwxyz',R=new Set();
+      for(let i=0;i<word.length;i++){R.add(word.slice(0,i)+word.slice(i+1));for(const c of L)R.add(word.slice(0,i)+c+word.slice(i+1));}
+      for(let i=0;i<word.length-1;i++)R.add(word.slice(0,i)+word[i+1]+word[i]+word.slice(i+2));
+      for(let i=0;i<=word.length;i++)for(const c of L)R.add(word.slice(0,i)+c+word.slice(i));
+      R.delete(word);return R;
+    }
+    function findEdCandidates(word) { const w=word.toLowerCase(),d=dictSet.value,ed1=[]; for(const e of edits1(w))if(d.has(e))ed1.push({word:e,dist:1}); ed1.sort((a,b)=>a.word.localeCompare(b.word));return ed1.slice(0,10); }
+    function inDict(word) { const lo=word.toLowerCase(); return dictSet.value.has(lo)||dictSet.value.has(word)||abbrSet.value.has(word)||abbrSet.value.has(word.toUpperCase())||abbrSet.value.has(lo); }
+
+    function analyseText(text) {
+      return tokenize(text).map((raw,idx) => {
+        const stripped=stripPunct(raw);
+        if(!stripped||isProtected(raw)||isProtected(stripped)) return {raw,stripped,position:idx,status:'protected',edCandidates:[],mlmCandidates:[],correction:null,chosenFrom:null,mlmProbOrig:0};
+        if(inDict(stripped)) return {raw,stripped,position:idx,status:'known',edCandidates:[],mlmCandidates:[],correction:null,chosenFrom:null,mlmProbOrig:0};
+        const edCandidates=findEdCandidates(stripped);
+        return {raw,stripped,position:idx,status:'oov',edCandidates,mlmCandidates:[],correction:null,chosenFrom:null,mlmProbOrig:0};
+      });
+    }
+
+    // ── File loading ──
+    function handleFile(file, slotId) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result, slot = fileSlots.find(f=>f.id===slotId);
+        if (slotId==='dict') {
+          const set = new Set();
+          for (const line of text.split(/\r?\n/)) { const t = line.trim(); if (!t||t.startsWith('#')||t.startsWith('"')||t.length<2) continue; set.add(t.toLowerCase()); set.add(t); }
+          const common = 'the,and,was,for,with,this,that,from,are,were,been,have,has,not,but,which,will,can,had,all,their,would,there,also,into,most,should,after,when,than,these,other,may,its,over,such,only,some,could,them,now,then,each,where,those,both,between,own,during,might,well,very,just,being,much,still,through,our,before,does,any,while,about,more,made,how,what,who,did,his,her,she,you,they,your,under,upon,above,below,patient,patients,hospital,medical,clinical,treatment,diagnosis,history,examination,findings,normal,present,noted,significant,moderate,mild,severe,chronic,acute,bilateral,right,left,upper,lower,positive,negative,stable,unchanged,increased,decreased,without'.split(',');
+          for (const w of common) set.add(w); dictSet.value = set; slot.count = set.size;
+        } else if (slotId==='abbr') {
+          const set = new Set();
+          for (const line of text.split(/\r?\n/).slice(1)) { const p = line.split('\t'); if(p[0]){const a=p[0].trim();set.add(a);set.add(a.toLowerCase());set.add(a.toUpperCase());} }
+          abbrSet.value = set; slot.count = set.size;
+        } else if (slotId==='corpus') {
+          const lines = text.split(/\r?\n/).filter(l=>l.trim()), rows = [];
+          for (let i=1;i<lines.length;i++){ let line = lines[i].replace(/\r$/,''); if (line.startsWith('"')&&line.endsWith('"')) line = line.slice(1,-1).replace(/""/g,'"'); if (line.trim()) rows.push(line.trim()); }
+          texts.value = rows; slot.count = rows.length;
+        }
+        slot.loaded = true;
+      };
+      reader.readAsText(file);
+    }
+
+    // ── MLM server call ──
+    async function callMLM(token, tokens, tokenIdx) {
+      const s=Math.max(0,tokenIdx-10), e=Math.min(tokens.length,tokenIdx+11);
+      const before=tokens.slice(s,tokenIdx).map(t=>t.raw).join(' '), after=tokens.slice(tokenIdx+1,e).map(t=>t.raw).join(' ');
+      try {
+        const resp = await fetch(mlmEndpoint.value+'/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({context_before:before,token:token.stripped,context_after:after,candidates:token.edCandidates.slice(0,8).map(c=>({word:c.word,dist:c.dist})),top_k:15})});
+        return resp.ok ? await resp.json() : null;
+      } catch(err) { return null; }
+    }
+
+    async function testMLM() {
+      backendStatus.value=null;
+      try{const r=await fetch(mlmEndpoint.value+'/health');if(r.ok){const d=await r.json();backendStatus.value={ok:true,msg:'OK: '+d.model+' on '+d.device};}else backendStatus.value={ok:false,msg:'Failed: '+r.status};}
+      catch(e){backendStatus.value={ok:false,msg:'Cannot reach MLM server. Run: python -m screener'};}
+    }
+
+    // ── Main pipeline ──
+    async function runAnalysis() {
+      phase.value='processing';
+      const from=(batchRange.from||1)-1, to=batchRange.to?Math.min(batchRange.to,texts.value.length):texts.value.length;
+      const subset=texts.value.slice(from,to);
+
+      progress.phase='Phase 1: Dictionary + Edit Distance...'; progress.total=subset.length; progress.current=0;
+      const results=[];
+      for(let i=0;i<subset.length;i++){if(i%2===0)await new Promise(r=>setTimeout(r,0));progress.current=i+1;results.push(analyseText(subset[i]));}
+
+      // Phase 2: MLM scoring for all OOV tokens
+      const oovs=[];
+      for(let ti=0;ti<results.length;ti++)for(let tki=0;tki<results[ti].length;tki++)if(results[ti][tki].status==='oov')oovs.push({ti,tki});
+
+      if(oovs.length>0){
+        progress.phase='Phase 2: MLM scoring '+oovs.length+' OOV tokens...';progress.total=oovs.length;progress.current=0;
+        for(let i=0;i<oovs.length;i++){
+          const{ti,tki}=oovs[i];const tok=results[ti][tki];
+          const r=await callMLM(tok,results[ti],tki);
+          if(r){
+            tok.mlmProbOrig = r.original_score||0;
+            // MLM candidates: all scored items that are NOT the original word
+            const mlmCands = (r.candidate_scores||[]).filter(c=>c.probability>0.001 && c.word.toLowerCase()!==tok.stripped.toLowerCase());
+            // Also add MLM top predictions that aren't already in the list
+            for(const p of (r.mlm_top_predictions||[])){
+              if(p.is_whole_word && p.token.length>=3 && p.probability>0.01 && !mlmCands.some(c=>c.word===p.token)){
+                mlmCands.push({word:p.token, probability:p.probability, edit_distance:-1});
+              }
+            }
+            mlmCands.sort((a,b)=>b.probability-a.probability);
+            tok.mlmCandidates = mlmCands.slice(0,10);
+          }
+          progress.current=i+1;if(i%3===0)await new Promise(r=>setTimeout(r,0));
+        }
+      }
+
+      analyses.value=results;currentTextIdx.value=0;selectedTokenIdx.value=null;undoStack.value=[];phase.value='review';
+    }
+
+    // ── Actions ──
+    function pushUndo(ti,tki,prev){undoStack.value.push({textIdx:ti,tokenIdx:tki,prev:{...prev}});if(undoStack.value.length>200)undoStack.value.shift();}
+    function approveFrom(idx, word, source){
+      const t=analyses.value[currentTextIdx.value][idx];
+      pushUndo(currentTextIdx.value,idx,{status:t.status,correction:t.correction,chosenFrom:t.chosenFrom});
+      t.status='approved';t.correction=word;t.chosenFrom=source;
+      autoAdvance(idx);
+    }
+    function skipToken(idx){const t=analyses.value[currentTextIdx.value][idx];pushUndo(currentTextIdx.value,idx,{status:t.status,correction:t.correction,chosenFrom:t.chosenFrom});t.status='skipped';t.chosenFrom=null;autoAdvance(idx);}
+    function applyCustom(){const v=customCorrection.value.trim();if(v&&selectedTokenIdx.value!==null){approveFrom(selectedTokenIdx.value,v,'custom');customCorrection.value='';}}
+    function autoAdvance(fromIdx){const toks=analyses.value[currentTextIdx.value];for(let i=fromIdx+1;i<toks.length;i++)if(toks[i].status==='oov'){selectedTokenIdx.value=i;return;}for(let i=0;i<fromIdx;i++)if(toks[i].status==='oov'){selectedTokenIdx.value=i;return;}selectedTokenIdx.value=null;}
+    function undo(){if(!undoStack.value.length)return;const a=undoStack.value.pop();if(a.textIdx!==currentTextIdx.value)currentTextIdx.value=a.textIdx;const t=analyses.value[a.textIdx][a.tokenIdx];t.status=a.prev.status;t.correction=a.prev.correction;t.chosenFrom=a.prev.chosenFrom;selectedTokenIdx.value=a.tokenIdx;}
+    if(typeof window!=='undefined')window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}});
+
+    function goToText(i){currentTextIdx.value=i;selectedTokenIdx.value=null;}
+    function selectToken(i){selectedTokenIdx.value=i;customCorrection.value='';}
+    function oovCountFor(i){return(analyses.value[i]||[]).filter(t=>t.status==='oov').length;}
+    function tokenClass(t){if(t.status==='approved')return'tok-approved';if(t.status==='skipped')return'tok-skipped';return'tok-oov';}
+    function reconstructToken(t){const l=t.raw.match(/^[^a-zA-Z]*/)?.[0]||'',r=t.raw.match(/[^a-zA-Z]*$/)?.[0]||'';return l+t.correction+r;}
+
+    // ── Export ──
+    function csvEsc(v){const s=String(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?'"'+s.replace(/"/g,'""')+'"':s;}
+    function dl(c,f,m){const b=new Blob([c],{type:m}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=f;a.click();URL.revokeObjectURL(u);}
+    function exportReport(){
+      const rows=['text_idx,position,original,correction,chosen_from,ed_candidates,mlm_candidates,mlm_prob_original,agree'];
+      analyses.value.forEach((tokens,ti)=>{for(const t of tokens)if(!['known','protected'].includes(t.status)){
+        const edTop=(t.edCandidates||[])[0]?.word||''; const mlmTop=(t.mlmCandidates||[])[0]?.word||'';
+        const agree=edTop&&mlmTop&&edTop===mlmTop?'yes':'no';
+        rows.push([ti,t.position,csvEsc(t.raw),csvEsc(t.correction||''),t.chosenFrom||'',
+          csvEsc((t.edCandidates||[]).map(c=>c.word).join('|')),
+          csvEsc((t.mlmCandidates||[]).map(c=>c.word+'('+c.probability.toFixed(3)+')').join('|')),
+          (t.mlmProbOrig||0).toFixed(4),agree].join(','));
+      }});
+      dl(rows.join('\n'),'ed_vs_mlm_comparison.csv','text/csv');
+    }
+
+    // ── Render ──
+    return () => {
+      const H = h;
+      const header = H('div',{class:'container'},[H('div',{class:'header'},[H('div',{class:'header-badge'},'ED\nvs\nMLM'), H('div',{},[H('div',{style:'font-size:18px;font-weight:700;color:#1e293b'},'Edit Distance vs MLM Comparison'), H('div',{style:'font-size:11px;color:#6b7280'},'Side-by-side comparison of orthographic vs contextual spell correction')])])]);
+
+      if (phase.value === 'upload') {
+        const dropzones = fileSlots.map(f => H('div',{class:'dropzone'+(f.loaded?' loaded':''),onClick:()=>{document.getElementById('file-'+f.id)?.click();}},[
+          H('input',{id:'file-'+f.id,type:'file',accept:f.accept,style:'display:none',onChange:e=>handleFile(e.target.files?.[0],f.id)}),
+          H('div',{style:'font-size:24px;margin-bottom:4px'},f.loaded?'\u2713':'\uD83D\uDCC1'),
+          H('div',{style:'font-weight:600;font-size:13px;color:'+(f.loaded?'#059669':'#374151')},f.label),
+          H('div',{style:'font-size:11px;color:#6b7280;margin-top:4px'},f.loaded?f.count.toLocaleString()+' entries':f.hint)]));
+        const mlmCard = H('div',{class:'card',style:'margin-top:16px'},[
+          H('div',{style:'font-size:13px;font-weight:600;color:#374151;margin-bottom:8px'},'MLM Server (required for comparison)'),
+          H('div',{class:'flex gap-2 items-center'},[
+            H('label',{style:'flex:0 0 auto'},'Endpoint:'),
+            H('input',{value:mlmEndpoint.value,onInput:e=>{mlmEndpoint.value=e.target.value;},style:'flex:1'}),
+            H('button',{class:'btn-teal',onClick:testMLM},'Test'),
+            backendStatus.value?H('span',{style:'font-size:11px;color:'+(backendStatus.value.ok?'#059669':'#dc2626')},backendStatus.value.msg):null,
+          ]),
+          H('div',{style:'font-size:10px;color:#9ca3af;margin-top:6px'},'Start the MLM server: uv run --extra mlm clinical-spell-screener'),
+        ]);
+        const batchCard = H('div',{class:'card',style:'margin-top:12px'},[
+          H('div',{style:'font-size:13px;font-weight:600;color:#374151;margin-bottom:6px'},'Batch range (optional)'),
+          H('div',{class:'flex gap-2 items-center'},[
+            H('input',{type:'number',value:batchRange.from,min:1,placeholder:'1',style:'width:70px',onInput:e=>{batchRange.from=parseInt(e.target.value)||1;}}),
+            H('span',{style:'color:#9ca3af'},'to'),
+            H('input',{type:'number',value:batchRange.to||'',min:1,placeholder:'all',style:'width:70px',onInput:e=>{batchRange.to=parseInt(e.target.value)||null;}}),
+          ]),
+        ]);
+        const startBtn = allFilesLoaded.value?H('div',{style:'text-align:center;margin-top:20px'},[H('button',{class:'btn-blue btn-big',style:'background:var(--teal)',onClick:runAnalysis},'Run Comparison \u2192')]):null;
+        return H('div',{},[header,H('div',{class:'container',style:'padding-top:24px;max-width:800px'},[H('div',{class:'grid-3'},dropzones),mlmCard,batchCard,startBtn])]);
+      }
+
+      if (phase.value === 'processing') {
+        return H('div',{},[header,H('div',{class:'container',style:'max-width:500px;padding-top:80px;text-align:center'},[H('div',{style:'color:#4b5563;font-weight:500;margin-bottom:12px'},progress.phase),H('div',{class:'progress-bg'},[H('div',{class:'progress-fill',style:'width:'+progressPct.value+'%'})]),H('div',{style:'font-size:11px;color:#9ca3af;margin-top:6px'},progress.current+'/'+progress.total)])]);
+      }
+
+      if (phase.value === 'review') {
+        const m = metrics.value;
+        // Agreement bar
+        const agreeBar = H('div',{style:'margin-bottom:12px'},[
+          H('div',{style:'font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px'},'Top-1 Agreement: '+m.total+' OOV tokens'),
+          H('div',{class:'metric-bar'},[
+            m.agree>0?H('div',{style:'background:var(--teal);flex:'+m.agree},m.agree+' agree'):null,
+            m.edOnly>0?H('div',{style:'background:var(--blue);flex:'+m.edOnly},m.edOnly+' ED only'):null,
+            m.mlmOnly>0?H('div',{style:'background:var(--purple);flex:'+m.mlmOnly},m.mlmOnly+' MLM only'):null,
+            m.neither>0?H('div',{style:'background:#94a3b8;flex:'+m.neither},m.neither+' none'):null,
+            (m.total-m.agree-m.edOnly-m.mlmOnly-m.neither)>0?H('div',{style:'background:var(--amber);flex:'+(m.total-m.agree-m.edOnly-m.mlmOnly-m.neither)},(m.total-m.agree-m.edOnly-m.mlmOnly-m.neither)+' disagree'):null,
+          ]),
+          H('div',{class:'flex gap-2',style:'margin-top:6px;font-size:11px;color:#6b7280'},[
+            H('span',{},'Chosen from: '),
+            H('span',{class:'tag-ed'},'ED: '+m.fromEd),
+            H('span',{class:'tag-mlm'},'MLM: '+m.fromMlm),
+            H('span',{style:'background:#e5e7eb;padding:1px 5px;border-radius:99px;font-size:9px;font-weight:600'},'Custom: '+m.fromCustom),
+            H('span',{style:'background:#fef3c7;padding:1px 5px;border-radius:99px;font-size:9px;font-weight:600'},'Skipped: '+m.skipped),
+          ]),
+        ]);
+
+        // Text nav
+        const textNav = H('div',{style:'margin-bottom:8px'},[
+          H('div',{style:'font-size:10px;font-weight:600;color:#6b7280;margin-bottom:4px'},'Text Navigator ('+analyses.value.length+' texts, showing #'+(currentTextIdx.value+1)+')'),
+          H('div',{class:'text-nav-scroll flex flex-wrap gap-1'},analyses.value.map((a,i)=>{
+            const r=oovCountFor(i);const cls=i===currentTextIdx.value?'nav-active':r>0?'nav-pending':'nav-default';
+            return H('button',{class:'nav-btn '+cls,onClick:()=>goToText(i)},['#'+(i+1),r>0?H('span',{class:'nav-badge'},String(r)):null]);
+          })),
+        ]);
+
+        // Text panel
+        const tokenSpans = [];const toks = currentTokens.value;
+        for(let idx=0;idx<toks.length;idx++){const tok=toks[idx];if(idx>0)tokenSpans.push(' ');
+          if(tok.status==='known'){tokenSpans.push(H('span',{class:'tok'},tok.raw));}
+          else if(tok.status==='protected'){tokenSpans.push(H('span',{class:'tok tok-protected'},tok.raw));}
+          else{const cls=tokenClass(tok)+(idx===selectedTokenIdx.value?' tok-selected':'');
+            let content;if(tok.status==='approved'&&tok.correction&&tok.correction!==tok.stripped){content=[H('span',{class:'tok-strike'},tok.raw),H('span',{class:'tok-correction'},reconstructToken(tok))];}else{content=tok.raw;}
+            tokenSpans.push(H('span',{class:'tok '+cls,onClick:()=>selectToken(idx)},content));}}
+        const textPanel = H('div',{class:'card',style:'display:flex;flex-direction:column'},[
+          H('div',{class:'flex justify-between items-center',style:'padding-bottom:8px;border-bottom:1px solid #e5e7eb;margin-bottom:8px'},[
+            H('div',{style:'font-size:13px;font-weight:600'},['Text #'+(currentTextIdx.value+1)+' ', H('span',{style:'font-size:11px;font-weight:400;color:#9ca3af'},currentOovCount.value+' remaining')]),
+            H('div',{class:'flex gap-1'},[H('button',{class:'btn-gray',disabled:!undoStack.value.length,onClick:undo},'\u21A9 Undo')])]),
+          H('div',{class:'text-panel'},tokenSpans)]);
+
+        // Comparison panel
+        let compareContent;const st=selectedToken.value;
+        if(!st||st.status==='known'||st.status==='protected'){
+          compareContent=H('div',{style:'color:#9ca3af;text-align:center;padding-top:40px;font-size:13px'},'Click a highlighted token to compare');
+        } else {
+          const ctxSpans=contextWindow.value.map((ct,ci)=>H('span',{class:ci===contextHighlightIdx.value?'context-highlight':''},[ct.raw,' ']));
+          const edCands=st.edCandidates||[];const mlmCands=st.mlmCandidates||[];
+          const edWords=new Set(edCands.map(c=>c.word));const mlmWords=new Set(mlmCands.map(c=>c.word));
+
+          compareContent=H('div',{},[
+            H('div',{style:'margin-bottom:8px'},[H('div',{class:'context-box'},ctxSpans)]),
+            H('div',{style:'text-align:center;margin-bottom:8px'},[
+              H('span',{class:'mono',style:'font-size:16px;font-weight:700;color:#b91c1c'},st.stripped),
+              st.mlmProbOrig>0?H('span',{style:'font-size:10px;color:#6b7280;margin-left:8px'},'P(orig)='+(st.mlmProbOrig*100).toFixed(1)+'%'):null,
+            ]),
+            // Side-by-side columns
+            H('div',{class:'grid-2'},[
+              // ED column
+              H('div',{class:'col-ed',style:'padding-left:8px'},[
+                H('div',{style:'font-size:11px;font-weight:600;color:#1e40af;margin-bottom:6px'},'Edit Distance ('+edCands.length+')'),
+                ...edCands.map(c=>{
+                  const inBoth=mlmWords.has(c.word);const isSel=st.correction===c.word&&st.chosenFrom==='ed';
+                  return H('button',{class:'cand-btn'+(isSel?' selected':'')+(inBoth?' overlap':''),onClick:()=>approveFrom(selectedTokenIdx.value,c.word,'ed')},[
+                    H('div',{class:'flex justify-between items-center'},[H('span',{},[c.word,H('span',{style:'font-size:9px;color:#9ca3af;margin-left:3px'},'ed='+c.dist)]),inBoth?H('span',{class:'tag-both'},'\u2713 both'):null])]);
+                }),
+                edCands.length===0?H('div',{style:'font-size:11px;color:#9ca3af;font-style:italic'},'No ed-1 candidates'):null,
+              ]),
+              // MLM column
+              H('div',{class:'col-mlm',style:'padding-left:8px'},[
+                H('div',{style:'font-size:11px;font-weight:600;color:#6b21a8;margin-bottom:6px'},'MLM Contextual ('+mlmCands.length+')'),
+                ...mlmCands.map(c=>{
+                  const inBoth=edWords.has(c.word);const isSel=st.correction===c.word&&st.chosenFrom==='mlm';
+                  return H('button',{class:'cand-btn'+(isSel?' selected':'')+(inBoth?' overlap':''),onClick:()=>approveFrom(selectedTokenIdx.value,c.word,'mlm')},[
+                    H('div',{class:'flex justify-between items-center'},[H('span',{},[c.word,c.edit_distance>0?H('span',{style:'font-size:9px;color:#9ca3af;margin-left:3px'},'ed='+c.edit_distance):H('span',{style:'font-size:9px;color:#7c3aed;margin-left:3px'},'ctx')]),H('span',{style:'font-size:10px;color:#6b7280'},(c.probability*100).toFixed(1)+'%')]),
+                    H('div',{class:'prob-bar',style:'width:'+Math.min(c.probability*200,100)+'%;background:var(--purple);opacity:'+(0.4+c.probability*0.6)})]);
+                }),
+                mlmCands.length===0?H('div',{style:'font-size:11px;color:#9ca3af;font-style:italic'},'No MLM candidates'):null,
+              ]),
+            ]),
+            // Custom + actions
+            H('div',{style:'margin-top:10px;border-top:1px solid #e5e7eb;padding-top:8px'},[
+              H('div',{class:'flex gap-1',style:'margin-bottom:6px'},[
+                H('input',{type:'text',value:customCorrection.value,onInput:e=>{customCorrection.value=e.target.value;},onKeydown:e=>{if(e.key==='Enter')applyCustom();},placeholder:'Custom correction...',style:'flex:1'}),
+                H('button',{class:'btn-blue',disabled:!customCorrection.value.trim(),onClick:applyCustom},'Apply'),
+              ]),
+              H('div',{class:'flex gap-1'},[
+                H('button',{class:'btn-amber',style:'flex:1',onClick:()=>skipToken(selectedTokenIdx.value)},'Skip (keep original)'),
+              ]),
+            ]),
+          ]);
+        }
+        const comparePanel=H('div',{class:'card',style:'display:flex;flex-direction:column'},[H('div',{class:'card-header',style:'color:var(--teal)'},'Comparison Panel'),H('div',{class:'compare-panel'},compareContent)]);
+
+        const exportBar=H('div',{class:'card flex justify-between items-center',style:'margin-top:10px'},[
+          H('div',{style:'font-size:11px;color:#6b7280'},'Agreement rate: '+(m.total>0?((m.agree/m.total)*100).toFixed(1):0)+'% ('+m.agree+'/'+m.total+')'),
+          H('button',{class:'btn-teal',style:'padding:8px 16px;font-weight:600',onClick:exportReport},'\u2193 Export Comparison CSV'),
+        ]);
+
+        return H('div',{},[header,H('div',{class:'container'},[agreeBar,textNav,H('div',{class:'grid-review'},[textPanel,comparePanel]),exportBar])]);
+      }
+      return H('div',{},[header]);
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

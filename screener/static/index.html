@@ -100,7 +100,7 @@ createApp({
     const progress = reactive({ current: 0, total: 0, phase: '' });
     const batchRange = reactive({ from: 1, to: null });
     const backendConfig = reactive({
-      backend: 'mlm', enabled: true,
+      backend: 'editdist', enabled: true,
       mlm: { endpoint: 'http://localhost:8400', confidenceThreshold: 0.30, ratioThreshold: 3.0, batchSize: 10 },
       ollama: { endpoint: 'http://localhost:11434', model: 'medgemma3:4b', confidenceThreshold: 0.7, batchSize: 10 },
     });
@@ -141,7 +141,7 @@ createApp({
         else if (t.status==='auto_approved') autoA++; else if (t.status==='skipped') skipped++;
         else if (t.status==='added_to_vocab') vocab++;
       }
-      return [{l:'Tokens',v:total,c:'gray'},{l:'Known',v:known,c:'gray'},{l:'Protected',v:prot,c:'gray'},{l:'MLM Auto',v:autoA,c:'blue'},{l:'Approved',v:approved,c:'green'},{l:'Skipped',v:skipped,c:'amber'},{l:'Vocab+',v:vocab,c:'indigo'},{l:'Remaining',v:oov,c:'red'}];
+      return [{l:'Tokens',v:total,c:'gray'},{l:'Known',v:known,c:'gray'},{l:'Protected',v:prot,c:'gray'},{l:'Auto',v:autoA,c:'blue'},{l:'Approved',v:approved,c:'green'},{l:'Skipped',v:skipped,c:'amber'},{l:'Vocab+',v:vocab,c:'indigo'},{l:'Remaining',v:oov,c:'red'}];
     });
     function isProtected(t) {
       if (/\d/.test(t)) return true; if (/^[\(\)\[\]\{\}\*\#\@]/.test(t)) return true;
@@ -229,10 +229,27 @@ createApp({
       const subset=texts.value.slice(from,to);
       progress.phase='Phase 1: Dictionary OOV detection...'; progress.total=subset.length; progress.current=0;
       const results=[]; for(let i=0;i<subset.length;i++){if(i%2===0)await new Promise(r=>setTimeout(r,0));progress.current=i+1;results.push(analyseText(subset[i]));}
-      if(backendConfig.enabled&&backendConfig.backend!=='none'){
+      if(backendConfig.enabled){
         const oovs=[]; for(let ti=0;ti<results.length;ti++)for(let tki=0;tki<results[ti].length;tki++)if(results[ti][tki].status==='oov')oovs.push({ti,tki});
-        if(oovs.length>0){ const label=backendConfig.backend==='mlm'?'MLM':'Ollama'; progress.phase='Phase 2: '+label+' \u2014 '+oovs.length+' OOV tokens...';progress.total=oovs.length;progress.current=0;
-          for(let i=0;i<oovs.length;i++){ const{ti,tki}=oovs[i];const tok=results[ti][tki]; if(backendConfig.backend==='mlm'){const r=await callMLMServer(tok,results[ti],tki);processMLMResult(tok,r);} else{const r=await callOllama(tok,results[ti],tki);processOllamaResult(tok,r);} progress.current=i+1;if(i%3===0)await new Promise(r=>setTimeout(r,0)); } }
+        if(oovs.length>0){
+          if(backendConfig.backend==='editdist'){
+            // Edit distance auto-correction: auto-correct when exactly 1 candidate
+            progress.phase='Phase 2: Edit Distance auto-correction \u2014 '+oovs.length+' OOV tokens...';progress.total=oovs.length;progress.current=0;
+            for(let i=0;i<oovs.length;i++){
+              const{ti,tki}=oovs[i];const tok=results[ti][tki];
+              if(tok.candidates.length===1){
+                tok.status='auto_approved';tok.correction=tok.candidates[0].word;
+                tok.llmSuggestion=tok.candidates[0].word;tok.llmConfidence=1.0;
+              }
+              // 2+ candidates: leave as OOV for human review (ambiguous)
+              // 0 candidates: leave as OOV (no close match)
+              progress.current=i+1;if(i%50===0)await new Promise(r=>setTimeout(r,0));
+            }
+          } else {
+            const label=backendConfig.backend==='mlm'?'MLM':'Ollama'; progress.phase='Phase 2: '+label+' \u2014 '+oovs.length+' OOV tokens...';progress.total=oovs.length;progress.current=0;
+            for(let i=0;i<oovs.length;i++){ const{ti,tki}=oovs[i];const tok=results[ti][tki]; if(backendConfig.backend==='mlm'){const r=await callMLMServer(tok,results[ti],tki);processMLMResult(tok,r);} else{const r=await callOllama(tok,results[ti],tki);processOllamaResult(tok,r);} progress.current=i+1;if(i%3===0)await new Promise(r=>setTimeout(r,0)); }
+          }
+        }
       }
       analyses.value=results;currentTextIdx.value=0;selectedTokenIdx.value=null;undoStack.value=[];phase.value='review';
     }
@@ -266,14 +283,14 @@ createApp({
 
     return () => {
       const H = h;
-      const header = H('div', {class:'container'}, [H('div', {class:'header'}, [H('div', {class:'header-badge'}, 'T1'), H('div', {}, [H('div', {style:'font-size:18px;font-weight:700;color:#1e293b'}, 'Clinical Corpus Spell Screener'), H('div', {style:'font-size:11px;color:#6b7280'}, 'Tier 1 \u2014 Dictionary OOV + MLM/LLM auto-correction + Human adjudication')])])]);
+      const header = H('div', {class:'container'}, [H('div', {class:'header'}, [H('div', {class:'header-badge'}, 'T1'), H('div', {}, [H('div', {style:'font-size:18px;font-weight:700;color:#1e293b'}, 'Clinical Corpus Spell Screener'), H('div', {style:'font-size:11px;color:#6b7280'}, 'Tier 1 \u2014 Dictionary OOV + Edit Distance / MLM auto-correction + Human adjudication')])])]);
 
       // ── UPLOAD PHASE ──
       if (phase.value === 'upload') {
         const dropzones = fileSlots.map(f => H('div', {class: 'dropzone' + (f.loaded ? ' loaded' : ''), onClick: () => { const el = document.getElementById('file-' + f.id); if (el) el.click(); }}, [H('input', { id: 'file-'+f.id, type: 'file', accept: f.accept, style: 'display:none', onChange: (e) => handleFile(e.target.files?.[0], f.id) }), H('div', {style:'font-size:24px;margin-bottom:4px'}, f.loaded ? '\u2713' : '\uD83D\uDCC1'), H('div', {style:'font-weight:600;font-size:13px;color:'+(f.loaded?'#059669':'#374151')}, f.label), H('div', {style:'font-size:11px;color:#6b7280;margin-top:4px'}, f.loaded ? f.count.toLocaleString()+' entries' : f.hint)]));
         const backendCard = H('div', {class:'card',style:'margin-top:16px'}, [
           H('div', {style:'font-size:13px;font-weight:600;color:#374151;margin-bottom:12px'}, '\u26A1 Backend Configuration'),
-          H('div', {class:'flex gap-2',style:'margin-bottom:12px'}, ['mlm','ollama','none'].map(v => { const labels = {mlm:'MLM Server (Recommended)',ollama:'Ollama (Generative)',none:'Dictionary Only'}; const descs = {mlm:'BioClinical-ModernBERT \u2014 calibrated probabilities',ollama:'MedGemma via Ollama \u2014 heuristic',none:'Human reviews all OOV'}; return H('div', {style:'flex:1;border:2px solid '+(backendConfig.backend===v?'#2563eb':'#e5e7eb')+';border-radius:10px;padding:10px;cursor:pointer;background:'+(backendConfig.backend===v?'#eff6ff':'white'), onClick:()=>{backendConfig.backend=v;}}, [H('div',{style:'font-size:12px;font-weight:600;color:'+(backendConfig.backend===v?'#1d4ed8':'#374151')},labels[v]), H('div',{style:'font-size:10px;color:#6b7280;margin-top:2px'},descs[v])]); })),
+          H('div', {class:'flex gap-2',style:'margin-bottom:12px'}, ['editdist','mlm','ollama'].map(v => { const labels = {editdist:'Edit Distance (Recommended)',mlm:'MLM Server',ollama:'Ollama (Generative)'}; const descs = {editdist:'Orthographic similarity \u2014 no server needed',mlm:'BioClinical-ModernBERT \u2014 contextual probabilities',ollama:'MedGemma via Ollama \u2014 heuristic'}; return H('div', {style:'flex:1;border:2px solid '+(backendConfig.backend===v?'#2563eb':'#e5e7eb')+';border-radius:10px;padding:10px;cursor:pointer;background:'+(backendConfig.backend===v?'#eff6ff':'white'), onClick:()=>{backendConfig.backend=v;}}, [H('div',{style:'font-size:12px;font-weight:600;color:'+(backendConfig.backend===v?'#1d4ed8':'#374151')},labels[v]), H('div',{style:'font-size:10px;color:#6b7280;margin-top:2px'},descs[v])]); })),
           backendConfig.backend==='mlm' ? H('div',{class:'grid-4',style:'margin-bottom:8px'},[H('div',{},[H('label',{},'Endpoint'),H('input',{value:backendConfig.mlm.endpoint,onInput:e=>{backendConfig.mlm.endpoint=e.target.value;},style:'width:100%'})]), H('div',{},[H('label',{},'Confidence threshold'),H('input',{type:'number',value:backendConfig.mlm.confidenceThreshold,min:0,max:1,step:0.05,onInput:e=>{backendConfig.mlm.confidenceThreshold=parseFloat(e.target.value);},style:'width:100%'})]), H('div',{},[H('label',{},'Ratio threshold'),H('input',{type:'number',value:backendConfig.mlm.ratioThreshold,min:1,max:100,step:0.5,onInput:e=>{backendConfig.mlm.ratioThreshold=parseFloat(e.target.value);},style:'width:100%'})]), H('div',{},[H('label',{},'Batch size'),H('input',{type:'number',value:backendConfig.mlm.batchSize,min:1,max:50,onInput:e=>{backendConfig.mlm.batchSize=parseInt(e.target.value);},style:'width:100%'})])]) : null,
           H('div',{class:'flex gap-2 items-center',style:'margin-top:8px'},[H('label',{style:'font-size:13px;display:flex;align-items:center;gap:6px'},[H('input',{type:'checkbox',checked:backendConfig.enabled,onChange:e=>{backendConfig.enabled=e.target.checked;}}),'Enable auto-correction']), H('button',{class:'btn-purple',onClick:testBackend},'Test Connection'), backendStatus.value ? H('span',{style:'font-size:11px;color:'+(backendStatus.value.ok?'#059669':'#dc2626')},backendStatus.value.msg) : null]),
         ]);
@@ -347,7 +364,7 @@ createApp({
         }
         const corrPanel = H('div',{class:'card',style:'display:flex;flex-direction:column'},[H('div',{class:'card-header'},'Correction Panel'), H('div',{class:'correction-panel'},corrContent)]);
         const globalBar = H('div',{class:'card flex justify-between items-center flex-wrap gap-2',style:'margin-top:12px'},[H('div',{class:'flex gap-2 items-center flex-wrap'},[H('button',{class:'btn-blue',style:'padding:8px 16px',onClick:acceptAllTopGlobal},'\u2713 Accept All Top (Global)'), addedVocab.value.size>0?H('span',{style:'font-size:11px;color:var(--indigo)'},addedVocab.value.size+' word(s) added to vocab'):null]), H('div',{class:'flex gap-2 flex-wrap'},[addedVocab.value.size>0?H('button',{class:'btn-indigo',onClick:exportVocab},'\u2193 Added Vocab'):null, H('button',{class:'btn-gray',onClick:exportReport},'\u2193 Report (CSV)'), H('button',{class:'btn-blue',style:'padding:8px 16px;font-weight:600',onClick:exportCorrected},'\u2193 Export Paired CSVs')])]);
-        const legend = H('div',{class:'legend'},[H('span',{},[H('span',{class:'legend-dot',style:'background:#fee2e2;border:1px solid #fca5a5'}),'OOV']), H('span',{},[H('span',{class:'legend-dot',style:'background:#dbeafe;border:1px solid #93c5fd'}),'MLM Auto']), H('span',{},[H('span',{class:'legend-dot',style:'background:#d1fae5;border:1px solid #6ee7b7'}),'Approved']), H('span',{},[H('span',{class:'legend-dot',style:'background:#fef3c7;border:1px solid #fcd34d'}),'Skipped']), H('span',{},[H('span',{class:'legend-dot',style:'background:#e0e7ff;border:1px solid #a5b4fc'}),'Vocab+']), H('span',{style:'color:#94a3b8'},'gray = Protected')]);
+        const legend = H('div',{class:'legend'},[H('span',{},[H('span',{class:'legend-dot',style:'background:#fee2e2;border:1px solid #fca5a5'}),'OOV']), H('span',{},[H('span',{class:'legend-dot',style:'background:#dbeafe;border:1px solid #93c5fd'}),'Auto (ED/MLM)']), H('span',{},[H('span',{class:'legend-dot',style:'background:#d1fae5;border:1px solid #6ee7b7'}),'Approved']), H('span',{},[H('span',{class:'legend-dot',style:'background:#fef3c7;border:1px solid #fcd34d'}),'Skipped']), H('span',{},[H('span',{class:'legend-dot',style:'background:#e0e7ff;border:1px solid #a5b4fc'}),'Vocab+']), H('span',{style:'color:#94a3b8'},'gray = Protected')]);
         return H('div',{},[header, H('div',{class:'container'},[stats, settingsPanel, textNav, H('div',{class:'grid-review'},[textPanel, corrPanel]), globalBar, legend])]);
       }
       return H('div',{},[header]);
